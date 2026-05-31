@@ -1,0 +1,254 @@
+/* ═══════════════════════════════════════════════
+   KANTARA — Setup Wizard & Auth CSS (Supabase)
+═══════════════════════════════════════════════ */
+
+/* ── Wizard Overlay ── */
+#wizard-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(10,16,28,.75);
+  backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .4s ease;
+  padding: 20px;
+}
+#wizard-overlay.visible { opacity: 1; }
+#wizard-overlay.closing { opacity: 0; pointer-events: none; }
+
+.wizard-wrap { width: 100%; max-width: 640px; }
+
+.wizard-card {
+  background: white; border-radius: 20px;
+  box-shadow: 0 40px 100px rgba(0,0,0,.35);
+  overflow: hidden; animation: wizardIn .5s cubic-bezier(.22,1,.36,1);
+}
+@keyframes wizardIn {
+  from { opacity: 0; transform: translateY(40px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Wizard Header ── */
+.wizard-header {
+  background: var(--navy); padding: 28px 32px 24px;
+  display: flex; align-items: center; justify-content: space-between; gap: 24px;
+  flex-wrap: wrap;
+}
+.wizard-logo { display: flex; align-items: center; gap: 12px; }
+.wizard-logo-icon {
+  width: 38px; height: 38px; background: var(--gold);
+  border-radius: 10px; display: flex; align-items: center; justify-content: center;
+}
+.wizard-logo-icon svg { width: 22px; height: 22px; }
+.wizard-logo-text {
+  font-family: var(--font-display); font-size: 1.4rem;
+  font-weight: 600; color: white; letter-spacing: .08em;
+}
+.wizard-steps { display: flex; align-items: center; gap: 0; }
+.wstep {
+  display: flex; align-items: center; gap: 7px;
+  font-size: .72rem; color: rgba(255,255,255,.35); font-weight: 600;
+  transition: .3s;
+}
+.wstep span {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: rgba(255,255,255,.1); color: rgba(255,255,255,.4);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .75rem; font-weight: 700; transition: .3s; flex-shrink: 0;
+}
+.wstep em { display: none; font-style: normal; }
+@media(min-width: 520px) { .wstep em { display: block; } }
+.wstep.active { color: white; }
+.wstep.active span { background: var(--gold); color: var(--navy); }
+.wstep.done span { background: rgba(34,197,94,.8); color: white; }
+.wstep.done { color: rgba(255,255,255,.6); }
+.wstep-line { width: 20px; height: 1px; background: rgba(255,255,255,.15); margin: 0 4px; }
+
+/* ── Wizard Step Content ── */
+.wizard-step { padding: 32px 32px 0; }
+.wizard-step.hidden { display: none; }
+
+.wizard-step-header {
+  display: flex; gap: 20px; align-items: flex-start; margin-bottom: 28px;
+}
+.wizard-step-num {
+  font-family: var(--font-display); font-size: 3rem; font-weight: 700;
+  color: var(--cream-dark); line-height: 1; flex-shrink: 0;
+}
+.wizard-step-title {
+  font-family: var(--font-display); font-size: 1.5rem;
+  font-weight: 600; color: var(--navy); margin-bottom: 6px;
+}
+.wizard-step-desc { font-size: .86rem; color: var(--text-muted); line-height: 1.6; }
+
+/* ── Wizard Form ── */
+.wizard-form { display: flex; flex-direction: column; gap: 18px; }
+.wfield { display: flex; flex-direction: column; gap: 6px; }
+.wlabel { font-size: .82rem; font-weight: 700; color: var(--text-primary); letter-spacing: .01em; }
+.wrequired { color: var(--danger); }
+.winput-wrap { position: relative; }
+.winput {
+  width: 100%; padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 10px;
+  font-size: .92rem; background: var(--bg-input); color: var(--text-primary);
+  font-family: var(--font-body); transition: .2s; outline: none;
+}
+.winput:focus { border-color: var(--navy); background: white; box-shadow: 0 0 0 3px rgba(15,27,45,.07); }
+.winput-eye {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); cursor: pointer; padding: 4px; background: none; border: none;
+  transition: .2s;
+}
+.winput-eye:hover { color: var(--navy); }
+.whelp { font-size: .75rem; color: var(--text-muted); }
+.whelp code { background: var(--cream-dark); padding: 2px 6px; border-radius: 4px; font-size: .72rem; }
+
+/* ── SQL Box ── */
+.wsql-box {
+  background: var(--navy); border-radius: 12px; overflow: hidden;
+}
+.wsql-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.wsql-label { font-size: .75rem; font-weight: 600; color: rgba(255,255,255,.5); letter-spacing: .06em; text-transform: uppercase; }
+.wsql-copy {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .75rem; font-weight: 600; color: var(--gold-light);
+  background: rgba(201,151,42,.12); border: 1px solid rgba(201,151,42,.2);
+  border-radius: 6px; padding: 5px 11px; cursor: pointer; transition: .2s;
+  font-family: var(--font-body);
+}
+.wsql-copy:hover { background: rgba(201,151,42,.2); }
+.wsql-content {
+  max-height: 180px; overflow-y: auto; padding: 16px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: .72rem; color: rgba(255,255,255,.75); line-height: 1.6;
+  white-space: pre; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.15) transparent;
+}
+
+/* ── Guide Steps ── */
+.wizard-steps-guide { display: flex; flex-direction: column; gap: 10px; }
+.guide-step { display: flex; align-items: flex-start; gap: 12px; }
+.guide-num {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--navy); color: white; font-size: .75rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.guide-step p { font-size: .85rem; color: var(--text-secondary); line-height: 1.5; padding-top: 3px; }
+
+/* ── Status Messages ── */
+.w-status {
+  padding: 12px 16px; border-radius: 10px;
+  font-size: .84rem; font-weight: 500; display: flex; align-items: center; gap: 10px;
+}
+.w-status-success { background: rgba(22,163,74,.08); color: #15803d; border: 1px solid rgba(22,163,74,.2); }
+.w-status-error { background: rgba(220,38,38,.07); color: #b91c1c; border: 1px solid rgba(220,38,38,.15); }
+
+/* ── Wizard Footer ── */
+.wizard-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 24px 32px 32px; gap: 12px;
+}
+.wbtn {
+  padding: 12px 22px; border-radius: 10px; font-size: .88rem; font-weight: 600;
+  cursor: pointer; transition: .2s; display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-body); border: none;
+}
+.wbtn-primary {
+  background: var(--navy); color: white;
+}
+.wbtn-primary:hover:not(:disabled) { background: var(--navy-mid); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.wbtn-primary:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.wbtn-outline {
+  background: transparent; border: 1.5px solid var(--border); color: var(--text-secondary);
+}
+.wbtn-outline:hover { background: var(--cream-dark); border-color: var(--navy); color: var(--navy); }
+
+/* ── Spinner ── */
+.wspin { animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Auth-page toast container ── */
+.toast-container {
+  position: fixed; top: 20px; right: 20px; z-index: 10000;
+  display: flex; flex-direction: column; gap: 10px; max-width: 380px;
+}
+.toast {
+  background: white; border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.15);
+  padding: 14px 16px; display: flex; align-items: flex-start; gap: 12px;
+  animation: fadeIn .3s ease; transition: opacity .3s, transform .3s;
+  border-left: 3px solid var(--info);
+}
+.toast.success { border-color: var(--success); }
+.toast.error   { border-color: var(--danger); }
+.toast.warning { border-color: var(--warning); }
+.toast.removing { opacity: 0; transform: translateX(20px); }
+.toast-icon svg { width: 18px; height: 18px; stroke-width: 2; }
+.toast.success .toast-icon { color: var(--success); }
+.toast.error   .toast-icon { color: var(--danger); }
+.toast.warning .toast-icon { color: var(--warning); }
+.toast.info    .toast-icon { color: var(--info); }
+.toast-content { flex: 1; }
+.toast-title { font-weight: 600; font-size: .88rem; color: var(--text-primary); line-height: 1.4; }
+.toast-message { font-size: .8rem; color: var(--text-muted); margin-top: 2px; }
+.toast-close { cursor: pointer; color: var(--text-muted); padding: 2px; opacity: .6; transition: .15s; }
+.toast-close:hover { opacity: 1; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Styles v4 wizard ─────────────────────────────── */
+.w-status-info {
+  background: rgba(37,99,235,.07);
+  color: #1d4ed8;
+  border: 1px solid rgba(37,99,235,.15);
+}
+
+.w-info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: rgba(201,151,42,.06);
+  border: 1px solid rgba(201,151,42,.2);
+  border-left: 3px solid var(--w-gold, #C9972A);
+  border-radius: 8px;
+  font-size: .82rem;
+  color: #92600a;
+  line-height: 1.5;
+  margin-top: 12px;
+}
+.w-info-box svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #C9972A;
+}
+
+/* Rendre le bloc SQL scrollable et plus lisible */
+.wsql-content {
+  max-height: 260px !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  font-size: .72rem !important;
+  line-height: 1.6 !important;
+  white-space: pre !important;
+  background: #0d1117 !important;
+  color: #e6edf3 !important;
+  padding: 16px !important;
+  border-radius: 0 0 8px 8px !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(201,151,42,.3) transparent;
+}
+.wsql-content::-webkit-scrollbar { width: 6px; height: 6px; }
+.wsql-content::-webkit-scrollbar-thumb { background: rgba(201,151,42,.3); border-radius: 3px; }
+
+/* Animation spin pour les boutons de chargement */
+@keyframes wspin { to { transform: rotate(360deg); } }
+.wspin { animation: wspin .8s linear infinite; display: inline-block; }
+
+/* Wizard card scroll sur petit écran */
+.wizard-card {
+  max-height: 92vh;
+  overflow-y: auto;
+}

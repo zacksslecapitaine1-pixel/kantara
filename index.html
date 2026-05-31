@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kantara — Installation & Connexion</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230F1B2D'/><path d='M6 22 Q16 8 26 22' fill='none' stroke='%23C9972A' stroke-width='3' stroke-linecap='round'/><circle cx='16' cy='12' r='3' fill='%23C9972A'/></svg>"/>
+
+  <!-- Supabase JS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <!-- App scripts (loaded early for SQL constant) -->
+  <script src="js/config/supabase.js"></script>
+  <script src="js/utils/i18n.js"></script>
+  <script src="js/utils/helpers.js"></script>
+  <script src="js/modules/auth.js"></script>
+
+  <link rel="stylesheet" href="css/variables.css"/>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--cream);
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Animations ── */
+    @keyframes fadeUp   { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
+    @keyframes spin     { to { transform:rotate(360deg); } }
+    @keyframes shake    { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+    @keyframes pulse    { 0%,100%{opacity:1} 50%{opacity:.5} }
+    @keyframes slideIn  { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
+    @keyframes slideOut { from{opacity:1;transform:translateX(0)} to{opacity:0;transform:translateX(-40px)} }
+
+    .shake { animation: shake .5s ease; }
+    .hidden { display: none !important; }
+
+    /* ── Top Bar ── */
+    .topbar {
+      background: var(--navy);
+      padding: 0 32px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      flex-shrink: 0;
+    }
+    .topbar-logo { display: flex; align-items: center; gap: 12px; }
+    .topbar-logo-icon {
+      width: 34px; height: 34px;
+      background: var(--gold);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .topbar-logo-icon svg { width: 20px; height: 20px; }
+    .topbar-logo-text {
+      font-family: var(--font-display);
+      font-size: 1.3rem; font-weight: 600;
+      color: white; letter-spacing: .08em;
+    }
+    .topbar-step-indicator {
+      display: flex; align-items: center; gap: 6px;
+    }
+    .step-pill {
+      padding: 4px 12px; border-radius: 20px;
+      font-size: .72rem; font-weight: 700; letter-spacing: .05em;
+      text-transform: uppercase; transition: .3s;
+      background: rgba(255,255,255,.08); color: rgba(255,255,255,.35);
+    }
+    .step-pill.active { background: var(--gold); color: var(--navy); }
+    .step-pill.done   { background: rgba(34,197,94,.2); color: #4ade80; }
+    .step-sep { color: rgba(255,255,255,.2); font-size: .8rem; }
+
+    /* ── Main Layout ── */
+    .main-wrap {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 400px 1fr;
+      min-height: 0;
+    }
+    @media (max-width: 900px) {
+      .main-wrap { grid-template-columns: 1fr; }
+      .side-panel { display: none !important; }
+    }
+
+    /* ── Side Panel ── */
+    .side-panel {
+      background: var(--navy);
+      padding: 40px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: sticky;
+      top: 60px;
+      height: calc(100vh - 60px);
+      overflow-y: auto;
+    }
+    .side-panel::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 10% 90%, rgba(201,151,42,.15) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .side-title {
+      font-family: var(--font-display);
+      font-size: 1.7rem; font-weight: 600;
+      color: white; line-height: 1.25;
+      margin-bottom: 8px;
+      position: relative;
+    }
+    .side-title em { color: var(--gold-light); font-style: normal; }
+    .side-subtitle {
+      font-size: .85rem; color: rgba(255,255,255,.45);
+      line-height: 1.7; margin-bottom: 36px;
+      position: relative;
+    }
+    .side-steps {
+      display: flex; flex-direction: column; gap: 0;
+      position: relative;
+    }
+    .side-steps::before {
+      content: '';
+      position: absolute;
+      left: 15px; top: 20px;
+      width: 1px; height: calc(100% - 20px);
+      background: rgba(255,255,255,.08);
+    }
+    .side-step {
+      display: flex; align-items: flex-start; gap: 16px;
+      padding: 0 0 28px;
+      position: relative;
+      cursor: pointer;
+      transition: .2s;
+    }
+    .side-step-num {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.07);
+      border: 1.5px solid rgba(255,255,255,.12);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .78rem; font-weight: 700;
+      color: rgba(255,255,255,.35);
+      flex-shrink: 0;
+      transition: .3s;
+      position: relative; z-index: 1;
+    }
+    .side-step.active .side-step-num {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: var(--navy);
+    }
+    .side-step.done .side-step-num {
+      background: rgba(34,197,94,.2);
+      border-color: #4ade80;
+      color: #4ade80;
+    }
+    .side-step-content { padding-top: 4px; }
+    .side-step-label {
+      font-size: .85rem; font-weight: 700;
+      color: rgba(255,255,255,.3);
+      margin-bottom: 4px;
+      transition: .3s;
+    }
+    .side-step.active .side-step-label { color: white; }
+    .side-step.done .side-step-label   { color: rgba(255,255,255,.55); }
+    .side-step-desc {
+      font-size: .76rem; color: rgba(255,255,255,.2);
+      line-height: 1.5; transition: .3s;
+    }
+    .side-step.active .side-step-desc { color: rgba(255,255,255,.45); }
+    .side-step.done .side-step-desc   { color: rgba(255,255,255,.3); }
+
+    .side-footer {
+      margin-top: auto;
+      padding-top: 24px;
+      border-top: 1px solid rgba(255,255,255,.07);
+      font-size: .75rem;
+      color: rgba(255,255,255,.25);
+      line-height: 1.6;
+    }
+    .side-footer a { color: rgba(201,151,42,.6); }
+
+    /* ── Content Area ── */
+    .content-area {
+      padding: 40px 48px;
+      overflow-y: auto;
+    }
+    @media (max-width: 768px) { .content-area { padding: 24px 20px; } }
+
+    /* ── Step Panels ── */
+    .step-panel {
+      max-width: 620px;
+      animation: slideIn .35s ease;
+    }
+    .step-panel.leaving { animation: slideOut .25s ease forwards; }
+
+    .step-eyebrow {
+      font-size: .7rem; font-weight: 800;
+      letter-spacing: .14em; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 10px;
+    }
+    .step-title {
+      font-family: var(--font-display);
+      font-size: 1.9rem; font-weight: 600;
+      color: var(--navy); line-height: 1.2;
+      margin-bottom: 10px;
+    }
+    .step-desc {
+      font-size: .9rem; color: var(--text-muted);
+      line-height: 1.7; margin-bottom: 32px;
+      max-width: 520px;
+    }
+    .step-desc strong { color: var(--text-primary); }
+
+    /* ── SQL Block ── */
+    .sql-block {
+      background: var(--navy);
+      border-radius: 14px;
+      overflow: hidden;
+      margin-bottom: 28px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.15);
+    }
+    .sql-block-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px;
+      background: rgba(255,255,255,.04);
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .sql-block-title {
+      display: flex; align-items: center; gap: 8px;
+      font-size: .72rem; font-weight: 700;
+      color: rgba(255,255,255,.4);
+      letter-spacing: .08em; text-transform: uppercase;
+    }
+    .sql-block-title svg { color: var(--gold); }
+    .sql-copy-btn {
+      display: flex; align-items: center; gap: 7px;
+      padding: 6px 14px;
+      background: var(--gold);
+      color: var(--navy);
+      border: none; border-radius: 7px;
+      font-size: .78rem; font-weight: 700;
+      cursor: pointer; transition: .2s;
+      font-family: var(--font-body);
+    }
+    .sql-copy-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .sql-copy-btn.copied { background: #22c55e; color: white; }
+    .sql-code {
+      padding: 18px;
+      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      font-size: .7rem;
+      color: rgba(255,255,255,.7);
+      line-height: 1.7;
+      max-height: 280px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,.15) transparent;
+      white-space: pre;
+    }
+
+    /* ── Guide Steps ── */
+    .guide-steps {
+      display: flex; flex-direction: column; gap: 12px;
+      margin-bottom: 32px;
+    }
+    .guide-step {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 14px 16px;
+      background: white;
+      border: 1.5px solid var(--border);
+      border-radius: 10px;
+      transition: .2s;
+    }
+    .guide-step:hover { border-color: var(--navy); }
+    .guide-step-num {
+      width: 28px; height: 28px;
+      background: var(--navy); color: white;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .72rem; font-weight: 800;
+      flex-shrink: 0;
+    }
+    .guide-step-body { flex: 1; }
+    .guide-step-title { font-size: .88rem; font-weight: 700; color: var(--navy); margin-bottom: 2px; }
+    .guide-step-sub { font-size: .78rem; color: var(--text-muted); line-height: 1.5; }
+    .guide-step-sub code {
+      background: var(--cream-dark);
+      padding: 1px 6px; border-radius: 4px;
+      font-size: .7rem; color: var(--navy); font-weight: 600;
+    }
+
+    /* ── Form Fields ── */
+    .form-section { margin-bottom: 28px; }
+    .form-label {
+      display: block; font-size: .82rem; font-weight: 700;
+      color: var(--text-primary); margin-bottom: 7px; letter-spacing: .01em;
+    }
+    .form-label span { color: var(--danger); margin-left: 2px; }
+    .form-help { font-size: .75rem; color: var(--text-muted); margin-top: 5px; }
+    .form-help code {
+      background: var(--cream-dark); padding: 1px 5px;
+      border-radius: 3px; font-size: .7rem;
+    }
+    .input-wrap { position: relative; }
+    .form-input {
+      width: 100%; padding: 13px 16px;
+      border: 1.5px solid var(--border); border-radius: 10px;
+      font-size: .92rem; background: white; color: var(--text-primary);
+      font-family: var(--font-body); transition: .2s; outline: none;
+    }
+    .form-input.has-right { padding-right: 46px; }
+    .form-input:focus { border-color: var(--navy); box-shadow: 0 0 0 3px rgba(15,27,45,.07); }
+    .form-input.error { border-color: var(--danger); box-shadow: 0 0 0 3px rgba(220,38,38,.07); }
+    .input-eye {
+      position: absolute; right: 13px; top: 50%; transform: translateY(-50%);
+      background: none; border: none; cursor: pointer;
+      color: var(--text-muted); transition: .15s; padding: 4px;
+    }
+    .input-eye:hover { color: var(--navy); }
+
+    /* ── Connection Status ── */
+    .conn-status {
+      padding: 12px 16px; border-radius: 10px;
+      font-size: .84rem; font-weight: 500;
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px;
+    }
+    .conn-status.success { background: rgba(22,163,74,.08); color: #15803d; border: 1px solid rgba(22,163,74,.2); }
+    .conn-status.error   { background: rgba(220,38,38,.07); color: #b91c1c; border: 1px solid rgba(220,38,38,.15); }
+    .conn-status.info    { background: rgba(59,130,246,.07); color: #1d4ed8; border: 1px solid rgba(59,130,246,.15); }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .btn-main {
+      padding: 14px 28px;
+      background: var(--navy); color: white;
+      border: none; border-radius: 10px;
+      font-size: .92rem; font-weight: 700;
+      cursor: pointer; transition: .2s;
+      display: flex; align-items: center; gap: 9px;
+      font-family: var(--font-body);
+    }
+    .btn-main:hover:not(:disabled) { background: var(--navy-mid); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .btn-main:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+    .btn-main.gold { background: linear-gradient(135deg, var(--gold), var(--gold-light)); color: var(--navy); }
+    .btn-main.gold:hover:not(:disabled) { filter: brightness(1.06); }
+    .btn-back {
+      padding: 13px 20px;
+      background: transparent; border: 1.5px solid var(--border);
+      color: var(--text-secondary); border-radius: 10px;
+      font-size: .88rem; font-weight: 600;
+      cursor: pointer; transition: .2s;
+      display: flex; align-items: center; gap: 8px;
+      font-family: var(--font-body);
+    }
+    .btn-back:hover { background: var(--cream-dark); border-color: var(--navy); color: var(--navy); }
+    .btn-spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: white; border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    .btn-spinner.dark {
+      border: 2px solid rgba(15,27,45,.2);
+      border-top-color: var(--navy);
+    }
+
+    /* ── Mode Tabs (Login) ── */
+    .mode-tabs {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 8px; background: var(--cream-dark);
+      border-radius: 12px; padding: 5px;
+      margin-bottom: 28px;
+    }
+    .mode-tab {
+      padding: 11px 16px; border-radius: 9px;
+      font-size: .85rem; font-weight: 600;
+      color: var(--text-secondary);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      cursor: pointer; transition: .2s;
+      background: none; border: none; font-family: var(--font-body);
+    }
+    .mode-tab.active { background: white; color: var(--navy); box-shadow: 0 1px 6px rgba(0,0,0,.1); }
+    .mode-tab svg { width: 15px; height: 15px; opacity: .7; }
+    .mode-tab.active svg { opacity: 1; }
+
+    /* ── Info Box ── */
+    .info-box {
+      background: rgba(201,151,42,.06);
+      border: 1px solid rgba(201,151,42,.2);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: .83rem; color: var(--text-secondary);
+      display: flex; align-items: flex-start; gap: 10px;
+      margin-bottom: 20px;
+    }
+    .info-box svg { flex-shrink: 0; margin-top: 1px; color: var(--gold); }
+
+    /* ── Already connected bar ── */
+    .already-bar {
+      background: rgba(34,197,94,.07);
+      border: 1px solid rgba(34,197,94,.2);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: .82rem;
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px;
+      gap: 12px;
+    }
+    .already-bar-left {
+      display: flex; align-items: center; gap: 8px;
+      color: #15803d; font-weight: 600;
+    }
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e; flex-shrink: 0;
+      animation: pulse 2s ease infinite;
+    }
+    .already-bar-btn {
+      font-size: .75rem; color: #15803d; font-weight: 700;
+      background: none; border: none; cursor: pointer;
+      font-family: var(--font-body); text-decoration: underline;
+    }
+
+    /* ── Access Code Input ── */
+    #follower-code {
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      font-size: 1.1rem;
+      text-align: center;
+      font-weight: 700;
+    }
+
+    /* ── Toast ── */
+    #toast-container {
+      position: fixed; top: 20px; right: 20px;
+      z-index: 9999; display: flex; flex-direction: column; gap: 10px;
+      max-width: 360px;
+    }
+    .toast {
+      background: white; border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.15);
+      padding: 13px 15px;
+      display: flex; align-items: flex-start; gap: 11px;
+      animation: fadeUp .3s ease;
+      border-left: 3px solid var(--info);
+      transition: opacity .3s, transform .3s;
+    }
+    .toast.success { border-color: var(--success); }
+    .toast.error   { border-color: var(--danger); }
+    .toast.removing { opacity: 0; transform: translateX(20px); }
+    .toast-content { flex: 1; }
+    .toast-title { font-weight: 700; font-size: .86rem; color: var(--text-primary); }
+    .toast-msg { font-size: .78rem; color: var(--text-muted); margin-top: 2px; }
+    .toast-close { cursor: pointer; color: var(--text-muted); opacity: .5; transition: .15s; background: none; border: none; }
+    .toast-close:hover { opacity: 1; }
+    .toast.success .toast-icon { color: var(--success); }
+    .toast.error   .toast-icon { color: var(--danger); }
+    .toast.info    .toast-icon { color: var(--info); }
+  </style>
+</head>
+<body>
+
+<div id="toast-container"></div>
+
+<!-- ══════════════ TOP BAR ══════════════ -->
+<header class="topbar">
+  <div class="topbar-logo">
+    <div class="topbar-logo-icon">
+      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 24 Q16 6 28 24" fill="none" stroke="#0F1B2D" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="16" cy="10" r="4" fill="#0F1B2D"/>
+      </svg>
+    </div>
+    <span class="topbar-logo-text">KANTARA</span>
+  </div>
+  <div class="topbar-step-indicator">
+    <div class="step-pill active" id="pill-1">01 · Base de données</div>
+    <div class="step-sep">→</div>
+    <div class="step-pill" id="pill-2">02 · Connexion Supabase</div>
+    <div class="step-sep">→</div>
+    <div class="step-pill" id="pill-3">03 · Accès</div>
+  </div>
+</header>
+
+<!-- ══════════════ MAIN ══════════════ -->
+<div class="main-wrap">
+
+  <!-- ── Side Panel ── -->
+  <aside class="side-panel">
+    <div style="position:relative">
+      <h1 class="side-title">Bienvenue sur<br><em>Kantara</em></h1>
+      <p class="side-subtitle">Configurez votre espace en 3 étapes. Ça prend moins de 5 minutes.</p>
+      <div class="side-steps">
+        <div class="side-step active" id="side-step-1">
+          <div class="side-step-num">1</div>
+          <div class="side-step-content">
+            <div class="side-step-label">Créer la base de données</div>
+            <div class="side-step-desc">Copiez le SQL et exécutez-le dans votre projet Supabase</div>
+          </div>
+        </div>
+        <div class="side-step" id="side-step-2">
+          <div class="side-step-num">2</div>
+          <div class="side-step-content">
+            <div class="side-step-label">Connecter Supabase</div>
+            <div class="side-step-desc">Entrez l'URL et la clé API de votre projet</div>
+          </div>
+        </div>
+        <div class="side-step" id="side-step-3">
+          <div class="side-step-num">3</div>
+          <div class="side-step-content">
+            <div class="side-step-label">Accéder au logiciel</div>
+            <div class="side-step-desc">Entrez votre mot de passe ou code d'accès</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="side-footer">
+      Propulsé par <strong style="color:rgba(255,255,255,.5)">Supabase</strong><br>
+      Vos données restent dans votre projet.<br>
+      <a href="https://supabase.com" target="_blank">Créer un projet gratuit →</a>
+    </div>
+  </aside>
+
+  <!-- ── Content Area ── -->
+  <main class="content-area">
+
+    <!-- ════════════════════════════════
+         ÉTAPE 1 — SQL à copier
+    ════════════════════════════════ -->
+    <div class="step-panel" id="panel-step-1">
+      <div class="step-eyebrow">Étape 1 sur 3</div>
+      <h2 class="step-title">Créez votre base de données</h2>
+      <p class="step-desc">
+        Kantara utilise <strong>Supabase</strong> comme base de données. Si vous n'avez pas encore de projet, créez-en un gratuitement sur
+        <strong><a href="https://supabase.com" target="_blank" style="color:var(--navy)">supabase.com</a></strong>.
+        Ensuite, copiez le SQL ci-dessous et exécutez-le.
+      </p>
+
+      <!-- SQL Block -->
+      <div class="sql-block">
+        <div class="sql-block-header">
+          <div class="sql-block-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            SQL d'initialisation Kantara
+          </div>
+          <button class="sql-copy-btn" id="copy-sql-btn">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            Copier le SQL
+          </button>
+        </div>
+        <pre class="sql-code" id="sql-display"></pre>
+      </div>
+
+      <!-- Guide -->
+      <div class="guide-steps">
+        <div class="guide-step">
+          <div class="guide-step-num">1</div>
+          <div class="guide-step-body">
+            <div class="guide-step-title">Ouvrez votre projet Supabase</div>
+            <div class="guide-step-sub">Allez sur <code>supabase.com</code> → votre projet → menu <code>SQL Editor</code></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">2</div>
+          <div class="guide-step-body">
+            <div class="guide-step-title">Collez et exécutez le SQL</div>
+            <div class="guide-step-sub">Cliquez <code>New query</code>, collez le SQL copié ci-dessus, puis cliquez <code>Run</code></div>
+          </div>
+        </div>
+        <div class="guide-step">
+          <div class="guide-step-num">3</div>
+          <div class="guide-step-body">
+            <div class="guide-step-title">Cliquez le bouton ci-dessous</div>
+            <div class="guide-step-sub">Une fois le SQL exécuté avec succès, passez à l'étape suivante</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-main" id="step1-next">
+          J'ai exécuté le SQL
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </button>
+        <a href="https://supabase.com/dashboard" target="_blank" style="font-size:.82rem;color:var(--text-muted);text-decoration:none;display:flex;align-items:center;gap:5px">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Ouvrir Supabase
+        </a>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════
+         ÉTAPE 2 — Clés Supabase
+    ════════════════════════════════ -->
+    <div class="step-panel hidden" id="panel-step-2">
+      <div class="step-eyebrow">Étape 2 sur 3</div>
+      <h2 class="step-title">Connectez votre Supabase</h2>
+      <p class="step-desc">
+        Dans votre projet Supabase, allez dans <strong>Settings → API</strong> et copiez les deux informations ci-dessous.
+      </p>
+
+      <div class="form-section">
+        <label class="form-label" for="sb-url">URL du projet <span>*</span></label>
+        <input type="url" id="sb-url" class="form-input" placeholder="https://xxxxxxxxxxxx.supabase.co" autocomplete="off"/>
+        <p class="form-help">Project URL — dans <code>Settings → API → Project URL</code></p>
+      </div>
+
+      <div class="form-section">
+        <label class="form-label" for="sb-key">Clé API publique (anon key) <span>*</span></label>
+        <div class="input-wrap">
+          <input type="password" id="sb-key" class="form-input has-right" placeholder="eyJhbGciOiJIUzI1NiIsIn..." autocomplete="off"/>
+          <button type="button" class="input-eye" id="toggle-key">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <p class="form-help">Clé <code>anon public</code> — dans <code>Settings → API → Project API keys</code></p>
+      </div>
+
+      <!-- Mot de passe admin (première config) -->
+      <div id="password-setup-section" class="form-section">
+        <label class="form-label" for="sb-adminpass">Définir votre mot de passe administrateur <span>*</span></label>
+        <div class="input-wrap">
+          <input type="password" id="sb-adminpass" class="form-input has-right" placeholder="Choisissez un mot de passe (ex: 1234)" autocomplete="new-password"/>
+          <button type="button" class="input-eye" id="toggle-pass">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <p class="form-help">Ce mot de passe vous permettra d'accéder au logiciel. Par défaut : <code>1234</code></p>
+      </div>
+
+      <div id="conn-status" class="conn-status" style="display:none"></div>
+
+      <div class="btn-row">
+        <button class="btn-back" id="step2-back">← Retour</button>
+        <button class="btn-main" id="step2-connect">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.99 1.18 2 2 0 013 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14.92v2z"/></svg>
+          Tester et connecter
+        </button>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════
+         ÉTAPE 3 — Login
+    ════════════════════════════════ -->
+    <div class="step-panel hidden" id="panel-step-3">
+      <div class="step-eyebrow">Étape 3 sur 3 — Accès</div>
+      <h2 class="step-title">Entrez dans Kantara</h2>
+      <p class="step-desc">Choisissez votre type d'accès et entrez vos identifiants.</p>
+
+      <!-- Already connected bar (shown if returning user) -->
+      <div class="already-bar" id="already-bar" style="display:none">
+        <div class="already-bar-left">
+          <div class="live-dot"></div>
+          <span id="already-bar-text">Base de données connectée</span>
+        </div>
+        <button class="already-bar-btn" id="reconfigure-btn">Reconfigurer</button>
+      </div>
+
+      <!-- Mode tabs -->
+      <div class="mode-tabs">
+        <button class="mode-tab active" id="tab-creator" data-mode="creator">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Administrateur
+        </button>
+        <button class="mode-tab" id="tab-follower" data-mode="follower">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+          Observateur
+        </button>
+      </div>
+
+      <!-- Creator form -->
+      <div id="creator-section">
+        <div class="info-box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Accès complet : tous les projets, finances, paramètres et gestion des observateurs.</span>
+        </div>
+        <form id="creator-form" novalidate>
+          <div class="form-section">
+            <label class="form-label" for="creator-password">Mot de passe administrateur</label>
+            <div class="input-wrap">
+              <input type="password" id="creator-password" class="form-input has-right" placeholder="Votre mot de passe" autocomplete="current-password"/>
+              <button type="button" class="input-eye password-toggle">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
+            <p class="form-help">Mot de passe défini lors de la configuration initiale. Défaut : <code>1234</code></p>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="btn-main" id="creator-submit">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Entrer dans le système
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Follower form -->
+      <div id="follower-section" class="hidden">
+        <div class="info-box">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span>Accès accordé par l'administrateur. Entrez votre code unique ci-dessous.</span>
+        </div>
+        <form id="follower-form" novalidate>
+          <div class="form-section">
+            <label class="form-label" for="follower-code">Code d'accès</label>
+            <input type="text" id="follower-code" class="form-input" placeholder="KAN-ABCDEF" autocomplete="off" autocapitalize="characters"/>
+            <p class="form-help">Code fourni par votre administrateur. Exemple : <code>KAN-ABCD12</code></p>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="btn-main gold" id="follower-submit">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              Accéder au tableau de bord
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCRIPT PRINCIPAL
+══════════════════════════════════════ -->
+<script>
+  // Init utils
+  Prefs.load().applyTheme();
+  i18n.init();
+  Toast.init();
+
+  // ── State ──
+  let currentStep = 1;
+  const STORAGE_KEY = 'kantara_supabase_config';
+
+  // ── Fill SQL display ──
+  const sqlEl = document.getElementById('sql-display');
+  if (sqlEl) sqlEl.textContent = KANTARA_INIT_SQL.trim();
+
+  // ── Helpers ──
+  function goToStep(n, skipAnim = false) {
+    const old = document.getElementById(`panel-step-${currentStep}`);
+    const next = document.getElementById(`panel-step-${n}`);
+    if (!next) return;
+
+    if (!skipAnim && old) {
+      old.classList.add('leaving');
+      setTimeout(() => old.classList.add('hidden'), 250);
+    } else if (old) {
+      old.classList.add('hidden');
+    }
+
+    setTimeout(() => {
+      next.classList.remove('hidden');
+      currentStep = n;
+      updatePills();
+      updateSideSteps();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, skipAnim ? 0 : 260);
+  }
+
+  function updatePills() {
+    for (let i = 1; i <= 3; i++) {
+      const pill = document.getElementById(`pill-${i}`);
+      if (!pill) continue;
+      pill.classList.remove('active', 'done');
+      if (i === currentStep) pill.classList.add('active');
+      if (i < currentStep) pill.classList.add('done');
+    }
+  }
+
+  function updateSideSteps() {
+    for (let i = 1; i <= 3; i++) {
+      const s = document.getElementById(`side-step-${i}`);
+      if (!s) continue;
+      s.classList.remove('active', 'done');
+      if (i === currentStep) s.classList.add('active');
+      if (i < currentStep) s.classList.add('done');
+    }
+  }
+
+  function setStatus(type, msg) {
+    const el = document.getElementById('conn-status');
+    el.style.display = 'flex';
+    el.className = `conn-status ${type}`;
+    el.innerHTML = msg;
+  }
+  function hideStatus() {
+    const el = document.getElementById('conn-status');
+    el.style.display = 'none';
+  }
+
+  function setLoading(btnId, loading, label, goldSpinner = false) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    btn.disabled = loading;
+    if (loading) {
+      btn.innerHTML = `<span class="btn-spinner ${goldSpinner ? 'dark' : ''}"></span>${label}`;
+    }
+  }
+
+  // ── SQL Copy ──
+  document.getElementById('copy-sql-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('copy-sql-btn');
+    try {
+      await navigator.clipboard.writeText(KANTARA_INIT_SQL.trim());
+      btn.classList.add('copied');
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copié !`;
+      Toast.success('SQL copié !', 'Collez-le dans le SQL Editor de Supabase');
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg> Copier le SQL`;
+      }, 2500);
+    } catch {
+      Toast.error('Erreur', 'Copie manuelle : sélectionnez le SQL et Ctrl+C');
+    }
+  });
+
+  // ── Step 1 Next ──
+  document.getElementById('step1-next').addEventListener('click', () => goToStep(2));
+
+  // ── Step 2 Back ──
+  document.getElementById('step2-back').addEventListener('click', () => goToStep(1));
+
+  // ── Key toggle ──
+  document.getElementById('toggle-key').addEventListener('click', () => {
+    const inp = document.getElementById('sb-key');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+  document.getElementById('toggle-pass').addEventListener('click', () => {
+    const inp = document.getElementById('sb-adminpass');
+    inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+
+  // ── Step 2 Connect ──
+  document.getElementById('step2-connect').addEventListener('click', async () => {
+    const url     = document.getElementById('sb-url').value.trim();
+    const key     = document.getElementById('sb-key').value.trim();
+    const pass    = document.getElementById('sb-adminpass').value || '1234';
+
+    hideStatus();
+
+    if (!url) {
+      document.getElementById('sb-url').classList.add('error', 'shake');
+      setTimeout(() => document.getElementById('sb-url').classList.remove('shake'), 600);
+      return setStatus('error', '⚠️ L\'URL du projet est requise');
+    }
+    if (!url.startsWith('https://')) {
+      return setStatus('error', '⚠️ L\'URL doit commencer par <code>https://</code>');
+    }
+    if (!key) {
+      document.getElementById('sb-key').classList.add('error', 'shake');
+      setTimeout(() => document.getElementById('sb-key').classList.remove('shake'), 600);
+      return setStatus('error', '⚠️ La clé API est requise');
+    }
+
+    const btn = document.getElementById('step2-connect');
+    const origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="btn-spinner"></span> Connexion en cours...`;
+
+    try {
+      // Init Supabase
+      initSupabase({ url, anonKey: key });
+
+      // Test: check if settings table exists
+      const { error: testErr } = await getClient().from('settings').select('id').limit(1);
+
+      if (testErr && testErr.code !== 'PGRST116') {
+        // Table doesn't exist
+        throw new Error('Tables introuvables. Avez-vous bien exécuté le SQL à l\'étape 1 ?');
+      }
+
+      setStatus('success', '✅ Connexion réussie ! Configuration de votre espace...');
+
+      // Upsert admin config (all snake_case to match PostgreSQL columns)
+      const adminPass = pass || '1234';
+      const { error: upsertErr } = await getClient().from('settings').upsert({
+        id:           'config',
+        admin_password: adminPass,
+        display_name: 'Administrateur',
+        currency:     'XOF',
+        language:     'fr',
+        theme:        'light',
+        updated_at:   new Date().toISOString(),
+      }, { onConflict: 'id' });
+
+      if (upsertErr) {
+        // If already exists, just update the password
+        await getClient().from('settings')
+          .update({ admin_password: adminPass, updated_at: new Date().toISOString() })
+          .eq('id', 'config');
+      }
+
+      // Save config
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ url, anonKey: key }));
+
+      setTimeout(() => goToStep(3), 900);
+
+    } catch (e) {
+      btn.disabled = false;
+      btn.innerHTML = origHTML;
+      const msg = e.message?.includes('fetch') || e.message?.includes('Failed')
+        ? '❌ Impossible de joindre Supabase. Vérifiez votre URL.'
+        : `❌ ${e.message}`;
+      setStatus('error', msg);
+    }
+  });
+
+  // ── Mode tabs ──
+  document.querySelectorAll('.mode-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.mode-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const mode = tab.dataset.mode;
+      document.getElementById('creator-section').classList.toggle('hidden', mode !== 'creator');
+      document.getElementById('follower-section').classList.toggle('hidden', mode !== 'follower');
+    });
+  });
+
+  // ── Password toggle (login) ──
+  document.querySelector('#creator-section .password-toggle')?.addEventListener('click', () => {
+    const inp = document.getElementById('creator-password');
+    if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
+  });
+
+  // ── Creator Login ──
+  document.getElementById('creator-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const password = document.getElementById('creator-password').value;
+    const btn = document.getElementById('creator-submit');
+    if (!password) return;
+
+    const origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="btn-spinner"></span> Vérification...`;
+
+    try {
+      await Auth.login({ password });
+      Toast.success('Bienvenue dans Kantara !', '');
+      setTimeout(() => { window.location.href = 'app.html'; }, 600);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = origHTML;
+      Toast.error('Accès refusé', 'Mot de passe incorrect');
+      const inp = document.getElementById('creator-password');
+      inp.classList.add('error', 'shake');
+      setTimeout(() => { inp.classList.remove('shake', 'error'); }, 600);
+    }
+  });
+
+  // ── Follower Login ──
+  document.getElementById('follower-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const code = document.getElementById('follower-code').value;
+    const btn = document.getElementById('follower-submit');
+    if (!code) return;
+
+    const origHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="btn-spinner dark"></span> Vérification...`;
+
+    try {
+      await Auth.loginFollower({ code });
+      Toast.success('Accès accordé !', 'Redirection en cours...');
+      setTimeout(() => { window.location.href = 'app.html'; }, 600);
+    } catch (err) {
+      btn.disabled = false;
+      btn.innerHTML = origHTML;
+      Toast.error('Code invalide', 'Ce code d\'accès n\'est pas reconnu');
+      const inp = document.getElementById('follower-code');
+      inp.classList.add('error', 'shake');
+      setTimeout(() => { inp.classList.remove('shake', 'error'); }, 600);
+    }
+  });
+
+  // ── Reconfigure ──
+  document.getElementById('reconfigure-btn')?.addEventListener('click', () => {
+    if (confirm('Reconfigurer Supabase ? Vous serez déconnecté.')) {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('kantara_session');
+      location.reload();
+    }
+  });
+
+  // ── INIT: check if already configured ──
+  (function init() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const cfg = JSON.parse(raw);
+        if (cfg.url && cfg.anonKey) {
+          // Already configured — init Supabase and go straight to login
+          try {
+            initSupabase(cfg);
+            // Check existing session
+            Auth.init((user) => {
+              if (user) {
+                // Already logged in → go to app
+                window.location.href = 'app.html';
+                return;
+              }
+              // Show login step directly
+              goToStep(3, true);
+              // Show already-bar
+              const bar = document.getElementById('already-bar');
+              if (bar) {
+                bar.style.display = 'flex';
+                try {
+                  const host = new URL(cfg.url).hostname.split('.')[0];
+                  const lbl = document.getElementById('already-bar-text');
+                  if (lbl) lbl.textContent = `Connecté à Supabase · ${host}`;
+                } catch {}
+              }
+              // Pre-fill step 2 URL
+              const urlInp = document.getElementById('sb-url');
+              if (urlInp) urlInp.value = cfg.url;
+            });
+            return;
+          } catch {}
+        }
+      }
+    } catch {}
+    // Default: show step 1
+    goToStep(1, true);
+  })();
+</script>
+
+</body>
+</html>

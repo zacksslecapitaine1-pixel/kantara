@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Kantara</title>
+
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230F1B2D'/><path d='M6 22 Q16 8 26 22' fill='none' stroke='%23C9972A' stroke-width='3' stroke-linecap='round'/><circle cx='16' cy='12' r='3' fill='%23C9972A'/></svg>"/>
+
+  
+  
+  
+  
+  
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.1/jspdf.plugin.autotable.min.js"></script>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/variables.css"/>
+  <link rel="stylesheet" href="css/app.css"/>
+  <link rel="stylesheet" href="css/setup.css"/>
+
+  <style>
+    /* ── Loader overlay ── */
+    #app-loader {
+      position: fixed; inset: 0; background: var(--navy);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      z-index: 9999; transition: opacity 0.4s ease;
+    }
+    #app-loader.hide { opacity: 0; pointer-events: none; }
+    .loader-logo { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .loader-icon { width: 64px; height: 64px; background: linear-gradient(135deg, var(--gold), var(--gold-light)); border-radius: 18px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 32px rgba(201,151,42,0.4); }
+    .loader-name { font-family: 'Cormorant Garamond', serif; font-size: 2rem; font-weight: 600; color: white; letter-spacing: 0.1em; }
+    .loader-bar { width: 120px; height: 2px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+    .loader-bar-fill { height: 100%; background: var(--gold); border-radius: 2px; animation: loaderFill 1.2s ease forwards; }
+    @keyframes loaderFill { from{width:0} to{width:100%} }
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600&family=DM+Sans:wght@400;500;600&display=swap');
+
+    /* ── Page panels ── */
+    .page-panel { display: none; }
+    .page-panel.active { display: block; animation: fadeIn 0.3s ease both; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+    @keyframes goldGlow { 0%,100%{box-shadow:0 0 0 0 rgba(201,151,42,.3)} 50%{box-shadow:0 0 0 8px rgba(201,151,42,0)} }
+    @keyframes toastIn { from{opacity:0;transform:translateX(100%) scale(.9)} to{opacity:1;transform:translateX(0) scale(1)} }
+    @keyframes toastOut { from{opacity:1;transform:translateX(0) scale(1)} to{opacity:0;transform:translateX(100%) scale(.9)} }
+    @keyframes fadeInScale { from{opacity:0;transform:scale(.96)} to{opacity:1;transform:scale(1)} }
+    @keyframes shimmer { from{background-position:-200% 0} to{background-position:200% 0} }
+
+    /* ── Notification panel ── */
+    .notif-panel { position:absolute; top:calc(100% + 8px); right:0; width:360px; background:var(--bg-card); border:1px solid var(--border-soft); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); z-index:var(--z-dropdown); overflow:hidden; animation:fadeInScale .2s ease both; }
+    .notif-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--divider); }
+    .notif-title { font-family:var(--font-display); font-size:1.1rem; font-weight:500; color:var(--navy); }
+    .notif-item { display:flex; gap:12px; padding:14px 20px; border-bottom:1px solid var(--divider); cursor:pointer; transition:background .15s; }
+    .notif-item:hover { background:var(--bg-hover); }
+    .notif-item:last-child { border-bottom:none; }
+    .notif-item.unread { background:rgba(201,151,42,0.04); }
+    .notif-dot-badge { width:8px; height:8px; border-radius:50%; background:var(--gold); flex-shrink:0; margin-top:6px; }
+    .notif-item-text { font-size:.8rem; color:var(--text-secondary); line-height:1.5; }
+    .notif-item-title { font-size:.85rem; font-weight:600; color:var(--navy); margin-bottom:2px; }
+    .notif-item-time { font-size:.7rem; color:var(--text-muted); margin-top:4px; }
+    .notif-footer { padding:12px 20px; text-align:center; }
+    .notif-footer a { font-size:.8rem; color:var(--gold-muted); font-weight:500; }
+
+    /* ── User dropdown ── */
+    .user-dropdown { position:absolute; bottom:calc(100% + 8px); left:0; right:0; background:var(--bg-card); border:1px solid var(--border-soft); border-radius:var(--radius-lg); box-shadow:var(--shadow-xl); z-index:var(--z-dropdown); overflow:hidden; animation:fadeInScale .2s ease both; }
+
+    /* ── Kanban board ── */
+    .kanban-board { display:grid; grid-template-columns:repeat(4,1fr); gap:20px; align-items:start; }
+    .kanban-col { background:var(--cream); border-radius:var(--radius-lg); padding:16px; min-height:200px; }
+    .kanban-col-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+    .kanban-col-title { font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--text-muted); }
+    .kanban-col-count { font-size:.7rem; font-weight:700; background:var(--white); border:1px solid var(--border); border-radius:99px; padding:2px 8px; color:var(--text-secondary); }
+    .kanban-card { background:var(--white); border:1px solid var(--border-soft); border-radius:var(--radius-md); padding:14px; margin-bottom:10px; cursor:pointer; transition:all .2s; box-shadow:var(--shadow-sm); }
+    .kanban-card:hover { box-shadow:var(--shadow-md); transform:translateY(-1px); }
+    .kanban-card-title { font-size:.85rem; font-weight:600; color:var(--navy); margin-bottom:8px; line-height:1.4; }
+    .kanban-card-meta { font-size:.72rem; color:var(--text-muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+
+    /* ── Project cards ── */
+    .project-card { cursor:pointer; }
+    .project-card-header { padding:20px 20px 12px; }
+    .project-card-title { font-family:var(--font-display); font-size:1.1rem; font-weight:500; color:var(--navy); margin-bottom:4px; }
+    .project-card-client { font-size:.78rem; color:var(--text-muted); margin-bottom:12px; }
+    .project-card-progress { margin-bottom:12px; }
+    .project-card-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:12px 20px; border-top:1px solid var(--divider); background:var(--cream); border-radius:0 0 var(--radius-lg) var(--radius-lg); }
+    .project-stat { text-align:center; }
+    .project-stat-val { font-family:var(--font-display); font-size:1.1rem; font-weight:600; color:var(--navy); }
+    .project-stat-label { font-size:.68rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+
+    /* ── Health indicator ── */
+    .health-dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:6px; }
+    .health-green { background:var(--status-active); }
+    .health-orange { background:var(--status-pending); }
+    .health-red { background:var(--status-blocked); }
+
+    /* ── File upload ── */
+    .upload-zone { border:2px dashed var(--border); border-radius:var(--radius-lg); padding:32px; text-align:center; cursor:pointer; transition:all .2s; }
+    .upload-zone:hover, .upload-zone.dragover { border-color:var(--gold); background:rgba(201,151,42,0.04); }
+    .upload-zone-icon { width:48px; height:48px; background:var(--cream-dark); border-radius:var(--radius-md); display:flex; align-items:center; justify-content:center; margin:0 auto 12px; color:var(--text-muted); }
+    .upload-zone-text { font-size:.85rem; color:var(--text-muted); }
+    .upload-zone-text strong { color:var(--gold-muted); }
+
+    /* ── Invoice PDF preview area ── */
+    .invoice-preview { background:white; padding:40px; border:1px solid var(--border); border-radius:var(--radius-md); }
+
+    /* ── Quick stats row ── */
+    .quick-stat { display:flex; flex-direction:column; gap:2px; }
+    .quick-stat-val { font-family:var(--font-display); font-size:1.4rem; font-weight:600; color:var(--navy); }
+    .quick-stat-label { font-size:.72rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:.06em; }
+
+    /* ── Responsive extras ── */
+    @media(max-width:1024px) { .kanban-board { grid-template-columns:repeat(2,1fr); } }
+    @media(max-width:640px)  { .kanban-board { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════
+     APP LOADER
+══════════════════════════════════ -->
+<div id="app-loader">
+  <div class="loader-logo">
+    <div class="loader-icon">
+      <svg width="36" height="36" viewBox="0 0 32 32">
+        <path d="M4 24 Q16 6 28 24" fill="none" stroke="#0F1B2D" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="16" cy="10" r="4" fill="#0F1B2D"/>
+        <line x1="10" y1="24" x2="22" y2="24" stroke="#0F1B2D" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="loader-name">KANTARA</div>
+    <div class="loader-bar"><div class="loader-bar-fill"></div></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════
+     TOAST CONTAINER
+══════════════════════════════════ -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- ══════════════════════════════════
+     MOBILE OVERLAY
+══════════════════════════════════ -->
+<div id="mobile-nav-overlay" class="mobile-nav-overlay" style="display:none"></div>
+
+<!-- ══════════════════════════════════
+     APP LAYOUT
+══════════════════════════════════ -->
+<div class="app-layout">
+
+  <!-- ════════════════
+       SIDEBAR
+  ════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo-icon">
+        <svg width="20" height="20" viewBox="0 0 32 32">
+          <path d="M4 24 Q16 6 28 24" fill="none" stroke="#0F1B2D" stroke-width="3.5" stroke-linecap="round"/>
+          <circle cx="16" cy="10" r="4" fill="#0F1B2D"/>
+        </svg>
+      </div>
+      <span class="sidebar-logo-text">KANTARA</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <!-- Main -->
+      <div class="sidebar-section-label" data-i18n="nav_management">GESTION</div>
+
+      <div class="nav-item active" data-page="/dashboard">
+        <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span class="nav-label" data-i18n="nav_dashboard">Tableau de bord</span>
+      </div>
+
+      <div class="nav-item" data-page="/projects">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        <span class="nav-label" data-i18n="nav_projects">Projets</span>
+      </div>
+
+      <div class="nav-item" data-page="/tasks">
+        <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <span class="nav-label" data-i18n="nav_tasks">Tâches</span>
+        <span class="nav-badge" id="tasks-overdue-badge" style="display:none">0</span>
+      </div>
+
+      <div class="nav-item" data-page="/clients">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span class="nav-label" data-i18n="nav_clients">Clients</span>
+      </div>
+
+      <div class="nav-item" data-page="/suppliers">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <span class="nav-label" data-i18n="nav_suppliers">Fournisseurs</span>
+      </div>
+
+      <!-- Finance -->
+      <div class="sidebar-section-label" style="margin-top:12px" data-i18n="nav_finance">FINANCES</div>
+
+      <div class="nav-item" data-page="/expenses">
+        <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        <span class="nav-label" data-i18n="nav_expenses">Dépenses</span>
+      </div>
+
+      <div class="nav-item" data-page="/quotes">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        <span class="nav-label" data-i18n="nav_quotes">Devis</span>
+      </div>
+
+      <div class="nav-item" data-page="/invoices">
+        <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <span class="nav-label" data-i18n="nav_invoices">Factures</span>
+        <span class="nav-badge" id="invoices-due-badge" style="display:none">0</span>
+      </div>
+
+      <!-- Tools -->
+      <div class="sidebar-section-label" style="margin-top:12px" data-i18n="nav_tools">OUTILS</div>
+
+      <div class="nav-item" data-page="/proofs">
+        <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <span class="nav-label" data-i18n="nav_proofs">Preuves</span>
+      </div>
+
+      <div class="nav-item" data-page="/documents">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        <span class="nav-label" data-i18n="nav_documents">Documents</span>
+      </div>
+
+      <div class="nav-item" data-page="/reports">
+        <svg class="nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span class="nav-label" data-i18n="nav_reports">Rapports</span>
+      </div>
+
+      <!-- People -->
+      <div class="sidebar-section-label" style="margin-top:12px" data-i18n="nav_people">ÉQUIPE</div>
+
+      <div class="nav-item" data-page="/team">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <span class="nav-label" data-i18n="nav_team">Équipe</span>
+        <span class="nav-badge" id="team-count-badge" style="display:none">0</span>
+      </div>
+
+      <div class="nav-item" data-page="/settings">
+        <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label" data-i18n="nav_settings">Paramètres</span>
+      </div>
+    </nav>
+
+    <!-- User -->
+    <div class="sidebar-footer">
+      <div class="sidebar-user" id="sidebar-user-btn">
+        <div class="user-avatar" id="sidebar-avatar">?</div>
+        <div class="user-info">
+          <div class="user-name" id="sidebar-username">—</div>
+          <div class="user-email" id="sidebar-email">—</div>
+          <div class="sidebar-role-badge role-admin" id="sidebar-role-badge">Admin</div>
+        </div>
+      </div>
+      <!-- User dropdown -->
+      <div class="user-dropdown hidden" id="user-dropdown">
+        <div class="dropdown-item" data-page="/settings">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          <span data-i18n="nav_settings">Paramètres</span>
+        </div>
+        <div class="dropdown-divider"></div>
+        <div class="dropdown-item danger" id="logout-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          <span data-i18n="auth_sign_out">Se déconnecter</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Sidebar toggle -->
+  <button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle sidebar">
+    <svg class="toggle-icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+
+  <!-- ════════════════
+       MAIN CONTENT
+  ════════════════ -->
+  <main class="main-content" id="main-content">
+
+    <!-- TOP BAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <!-- Mobile menu -->
+        <button class="icon-btn" id="mobile-menu-btn" style="display:none">
+          <svg viewBox="0 0 24 24"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+
+        <h1 class="page-title" id="page-title">Tableau de bord</h1>
+      </div>
+
+      <div class="topbar-right">
+        <!-- Search -->
+        <div class="topbar-search">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" id="global-search" data-i18n-placeholder="search" placeholder="Rechercher..."/>
+        </div>
+
+        <!-- Save indicator -->
+        <span class="save-indicator" id="save-indicator"></span>
+
+        <!-- Save button -->
+        <button class="save-btn" id="save-btn">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/>
+            <polyline points="17 21 17 13 7 13 7 21"/>
+            <polyline points="7 3 7 8 15 8"/>
+          </svg>
+          <span data-i18n="save">Sauvegarder</span>
+        </button>
+
+        <!-- Notifications -->
+        <div class="dropdown" style="position:relative">
+          <button class="icon-btn" id="notif-btn">
+            <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            <span class="notif-dot" id="notif-dot" style="display:none"></span>
+          </button>
+          <div class="notif-panel hidden" id="notif-panel">
+            <div class="notif-header">
+              <span class="notif-title" data-i18n="notif_title">Notifications</span>
+              <button class="btn btn-ghost btn-sm" id="mark-all-read" data-i18n="notif_mark_all_read">Tout lire</button>
+            </div>
+            <div id="notif-list">
+              <div style="padding:32px;text-align:center;color:var(--text-muted);font-size:.85rem" data-i18n="notif_no_notifications">Aucune notification</div>
+            </div>
+            <div class="notif-footer">
+              <a href="#" data-page="/notifications" data-i18n="see_all">Voir tout</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Theme toggle -->
+        <button class="icon-btn" id="theme-toggle">
+          <svg id="theme-icon-light" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg id="theme-icon-dark" viewBox="0 0 24 24" style="display:none"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ════════════════════════════
+         PAGE PANELS
+    ════════════════════════════ -->
+    <div class="page-content">
+
+      <!-- DASHBOARD -->
+      <div class="page-panel active" id="panel-dashboard"></div>
+
+      <!-- PROJECTS -->
+      <div class="page-panel" id="panel-projects"></div>
+
+      <!-- TASKS -->
+      <div class="page-panel" id="panel-tasks"></div>
+
+      <!-- CLIENTS -->
+      <div class="page-panel" id="panel-clients"></div>
+
+      <!-- SUPPLIERS -->
+      <div class="page-panel" id="panel-suppliers"></div>
+
+      <!-- EXPENSES -->
+      <div class="page-panel" id="panel-expenses"></div>
+
+      <!-- QUOTES -->
+      <div class="page-panel" id="panel-quotes"></div>
+
+      <!-- INVOICES -->
+      <div class="page-panel" id="panel-invoices"></div>
+
+      <!-- PROOFS -->
+      <div class="page-panel" id="panel-proofs"></div>
+
+      <!-- REPORTS -->
+      <div class="page-panel" id="panel-reports"></div>
+
+      <!-- SETTINGS -->
+      <div class="page-panel" id="panel-settings"></div>
+
+      <!-- NOTIFICATIONS -->
+      <div class="page-panel" id="panel-notifications"></div>
+
+      <!-- TEAM (v4) -->
+      <div class="page-panel" id="panel-team"></div>
+
+      <!-- DOCUMENTS (v4) -->
+      <div class="page-panel" id="panel-documents"></div>
+
+    </div><!-- /page-content -->
+  </main><!-- /main-content -->
+</div><!-- /app-layout -->
+
+<!-- ════════════════════════════════════
+     GLOBAL MODALS
+════════════════════════════════════ -->
+<!-- Confirm modal (injected by JS) -->
+
+<!-- ════════════════════════════════════
+     QUICK CREATE FAB
+════════════════════════════════════ -->
+<div class="fab" id="fab-container">
+  <div class="fab-menu" id="fab-menu">
+    <div class="fab-item" onclick="App.goTo('/tasks');setTimeout(()=>Tasks._openModal(),300)">
+      <div class="fab-item-icon"><svg viewBox="0 0 24 24"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>
+      <span class="fab-item-label">Nouvelle tâche</span>
+    </div>
+    <div class="fab-item" onclick="App.goTo('/projects');setTimeout(()=>Projects._openModal(),300)">
+      <div class="fab-item-icon"><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>
+      <span class="fab-item-label">Nouveau projet</span>
+    </div>
+    <div class="fab-item" onclick="App.goTo('/clients');setTimeout(()=>Clients._openModal(),300)">
+      <div class="fab-item-icon"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+      <span class="fab-item-label">Nouveau client</span>
+    </div>
+    <div class="fab-item" onclick="App.goTo('/expenses');setTimeout(()=>Expenses._openModal(),300)">
+      <div class="fab-item-icon"><svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+      <span class="fab-item-label">Nouvelle dépense</span>
+    </div>
+  </div>
+  <button class="fab-main" id="fab-main-btn" title="Création rapide">
+    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+</div>
+
+<!-- ════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════ -->
+<script src="js/config/supabase.js"></script>
+<script src="js/setup/wizard.js"></script>
+<script src="js/utils/i18n.js"></script>
+<script src="js/utils/helpers.js"></script>
+<script src="js/modules/auth.js"></script>
+<script src="js/modules/dashboard.js"></script>
+<script src="js/modules/projects.js"></script>
+<script src="js/modules/tasks.js"></script>
+<script src="js/modules/clients.js"></script>
+<script src="js/modules/suppliers-expenses.js"></script>
+<script src="js/modules/modules-rest.js"></script>
+<script src="js/modules/team.js"></script>
+<script src="js/modules/documents.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

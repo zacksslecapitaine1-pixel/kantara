@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"/>
+<script>
+  // GitHub Pages SPA fix — redirect all 404s back to index
+  const path = window.location.pathname;
+  const hash = path.slice(1); // remove leading /
+  window.location.replace('/' + window.location.pathname.split('/')[1] + '/index.html#' + path);
+</script>
+</head><body></body></html>
