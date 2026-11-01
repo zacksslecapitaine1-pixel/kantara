@@ -1,3 +1,15 @@
+# Kantara — Logiciel de gestion de projets
+
+Application web de gestion de projets, tâches, clients, équipe et documents, avec tableau Kanban, jalons, recherche globale et export CSV. Données hébergées sur Supabase.
+
+**Démo :** https://zacksslecapitaine1-pixel.github.io/kantara/
+
+**Stack :** HTML · CSS · JavaScript (modules) · Supabase
+**Déploiement :** site statique publié depuis `master` via GitHub Pages.
+**Auteur :** Zackss (Oumate Razakou) — [Dev.zak](https://dev-zak.netlify.app), Lomé, Togo.
+
+---
+
 # KANTARA v4 — Logiciel de Gestion de Projets
 **Dev.zak | Zackss (Oumate Razakou) | Lomé, Togo**
 
