@@ -126,9 +126,9 @@ const Clients = {
         const paid=clInv.reduce((s,i)=>s+(i.paid||0),0);
         const due=invoiced-paid;
         return`<tr>
-          <td><div style="display:flex;align-items:center;gap:10px"><div class="user-avatar" style="width:32px;height:32px;font-size:.78rem;background:linear-gradient(135deg,var(--gold-muted),var(--gold))">${Format.initials(c.name)}</div><div><div style="font-weight:600;color:var(--navy)">${c.name}</div>${c.email?`<div style="font-size:.72rem;color:var(--text-muted)">${c.email}</div>`:''}</div></div></td>
+          <td><div style="display:flex;align-items:center;gap:10px"><div class="user-avatar" style="width:32px;height:32px;font-size:.78rem;background:linear-gradient(135deg,var(--gold-muted),var(--gold))">${Format.initials(c.name)}</div><div><div style="font-weight:600;color:var(--navy)">${escapeHtml(c.name)}</div>${c.email?`<div style="font-size:.72rem;color:var(--text-muted)">${escapeHtml(c.email)}</div>`:''}</div></div></td>
           <td style="color:var(--text-muted)">${c.type==='company'?i18n.t('client_type_company'):i18n.t('client_type_individual')}</td>
-          <td style="color:var(--text-muted)">${c.phone||'—'}</td>
+          <td style="color:var(--text-muted)">${escapeHtml(c.phone||'—')}</td>
           <td>${Format.currency(invoiced,currency)}</td>
           <td style="color:${due>0?'var(--danger)':'var(--success)'};font-weight:${due>0?600:400}">${Format.currency(due,currency)}</td>
           <td>${statusBadge(c.status)}</td>

@@ -242,7 +242,7 @@ const Tasks = {
     if (sel) {
       const cur = sel.value;
       sel.innerHTML = `<option value="all">${i18n.t('all')} ${i18n.t('nav_projects')}</option>` +
-        this._projects.map(p => `<option value="${p.id}" ${p.id===cur?'selected':''}>${p.name}</option>`).join('');
+        this._projects.map(p => `<option value="${p.id}" ${p.id===cur?'selected':''}>${escapeHtml(p.name)}</option>`).join('');
     }
   },
 
@@ -434,6 +434,7 @@ const Tasks = {
     if (!tag || this._tagsList.includes(tag)) return;
     this._tagsList.push(tag);
     this._renderTags();
+    document.getElementById('tag-input')?.focus();
   },
   _removeTag(tag) {
     this._tagsList = this._tagsList.filter(t => t !== tag);
@@ -513,6 +514,11 @@ const Tasks = {
     const errEl   = document.getElementById('task-title-err');
     if (!title) { if (errEl) errEl.textContent = i18n.t('required'); titleEl?.focus(); return; }
     if (errEl) errEl.textContent = '';
+    // Étiquette / élément de checklist tapés mais pas validés avec Entrée : on ne les perd plus
+    const pendingTag = document.getElementById('tag-input')?.value.trim();
+    if (pendingTag) { this._addTag(pendingTag); const ti = document.getElementById('tag-input'); if (ti) ti.value = ''; }
+    const pendingChk = document.getElementById('checklist-new-input')?.value.trim();
+    if (pendingChk) { this._addChecklistItem(pendingChk); const ci = document.getElementById('checklist-new-input'); if (ci) ci.value = ''; }
     const data = {
       title,
       notes:           document.getElementById('task-desc')?.value.trim() || '',

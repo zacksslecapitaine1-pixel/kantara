@@ -230,6 +230,7 @@ const Quotes = {
     errEl.textContent='';
     const editId=document.getElementById('qt-save-btn').dataset.editId;
     const lines=this._getLines();
+    if(!lines.length){Toast.warning(i18n.t('error_required'),'Ajoutez au moins une ligne');return;}
     const taxPct=parseFloat(document.getElementById('qt-tax').value)||0;
     const subtotal=lines.reduce((s,l)=>s+l.total,0);
     const tax=subtotal*(taxPct/100);
@@ -586,6 +587,7 @@ const Invoices = {
     errEl.textContent='';
     const editId=document.getElementById('inv-save-btn').dataset.editId;
     const lines=this._getLines();
+    if(!lines.length){Toast.warning(i18n.t('error_required'),'Ajoutez au moins une ligne');return;}
     const taxPct=parseFloat(document.getElementById('inv-tax').value)||0;
     const subtotal=lines.reduce((s,l)=>s+l.total,0);
     const total=subtotal+(subtotal*(taxPct/100));
@@ -767,12 +769,12 @@ const Proofs = {
     const el=document.getElementById('pr-content');if(!el)return;
     if(!this._proofs.length){el.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div><h3 class="empty-title">${i18n.t('proof_no_proofs')}</h3><button class="btn btn-primary" onclick="document.getElementById('pr-new-btn').click()">+ ${i18n.t('proof_add')}</button></div>`;return;}
     el.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:16px">
-      ${this._proofs.map(p=>`<div class="card" style="overflow:hidden;cursor:pointer" onclick="window.open('${p.url||'#'}','_blank')">
+      ${this._proofs.map(p=>`<div class="card" style="overflow:hidden;cursor:pointer" onclick="Proofs._open('${p.id}')">
         <div style="height:120px;background:var(--cream);display:flex;align-items:center;justify-content:center;overflow:hidden">
-          ${p.url&&p.type!=='pdf'?`<img src="${p.url}" style="width:100%;height:100%;object-fit:cover"/>`:`<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`}
+          ${p.url&&Proofs._isImage(p)?`<img src="${escapeHtml(p.url)}" style="width:100%;height:100%;object-fit:cover"/>`:`<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`}
         </div>
         <div style="padding:10px 12px">
-          <div style="font-size:.78rem;font-weight:500;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.fileName||'—'}</div>
+          <div style="font-size:.78rem;font-weight:500;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.fileName||'—')}</div>
           <div style="font-size:.68rem;color:var(--text-muted);margin-top:2px">${Format.timeAgo(p.createdAt)}</div>
           <div style="display:flex;justify-content:flex-end;margin-top:8px"><button class="action-btn delete" onclick="event.stopPropagation();Proofs._delete('${p.id}')">${deleteIcon()}</button></div>
         </div>
@@ -780,9 +782,23 @@ const Proofs = {
     </div>`;
   },
   _openModal(){ Modal.open('modal-proof'); },
+  _isImage(p){ return /^data:image\//i.test(p.url||'') || /\.(png|jpe?g|gif|webp|svg)(\?|$)/i.test(p.fileName||p.url||''); },
+  _open(id){
+    const p=this._proofs.find(x=>x.id===id); if(!p||!p.url) return;
+    // Les navigateurs bloquent l'ouverture directe des data: URL → conversion en Blob
+    if(/^data:/i.test(p.url)){
+      try{
+        const [head,b64]=p.url.split(','); const mime=(head.match(/data:([^;]+)/)||[])[1]||'application/octet-stream';
+        const bin=atob(b64); const arr=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+        window.open(URL.createObjectURL(new Blob([arr],{type:mime})),'_blank'); return;
+      }catch(e){ Toast.error(i18n.t('error_generic'),e.message); return; }
+    }
+    window.open(p.url,'_blank','noopener');
+  },
   async _save(){
     const btn=document.getElementById('pr-save-btn');
     const file=btn._file;if(!file){Toast.warning(i18n.t('error_required'));return;}
+    if(file.size>5*1024*1024 && !file.type.startsWith('image/')){Toast.warning(i18n.t('error_generic'),'Fichier trop volumineux (max 5 Mo)');return;}
     btn.disabled=true;btn.textContent=i18n.t('loading');
     try{
       const compressed=file.type.startsWith('image/')?await compressImage(file):file;
@@ -1166,6 +1182,19 @@ const Settings = {
       </div>`).join('');
   },
   _bindEvents(isCreator){
+    if (isCreator && this._panel && !document.getElementById('set-sql-copy')) {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.style.cssText = 'padding:20px;margin-top:16px';
+      card.innerHTML = `<h3 style="margin:0 0 6px;color:var(--navy);font-size:1rem">Base de données</h3>
+        <p style="font-size:.82rem;color:var(--text-muted);margin:0 0 12px">Si une création échoue (colonne manquante), copiez ce script et exécutez-le une fois dans Supabase → SQL Editor. Il est sans danger : il ne supprime rien.</p>
+        <button class="btn btn-outline" id="set-sql-copy">Copier le script SQL</button>`;
+      this._panel.appendChild(card);
+      document.getElementById('set-sql-copy').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(KANTARA_INIT_SQL.trim()); Toast.success('SQL copié', 'Collez-le dans le SQL Editor de Supabase'); }
+        catch(e) { Toast.error(i18n.t('error_generic'), e.message); }
+      });
+    }
     document.getElementById('set-profile-save')?.addEventListener('click',async()=>{
       const name=document.getElementById('set-name').value.trim();
       const company=document.getElementById('set-company').value.trim();

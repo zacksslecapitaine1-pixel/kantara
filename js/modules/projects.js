@@ -236,7 +236,6 @@ const Projects = {
       blank: { name: '', status: 'active', priority: 'medium', milestones: [] },
     };
     const tpl = templates[tplKey] || templates.blank;
-    this._milestones = tpl.milestones.map(m => ({ ...m, done: false }));
     this._openModal(null, tpl);
   },
 
@@ -408,8 +407,11 @@ const Projects = {
       const ss = document.getElementById('proj-status'); if (ss) ss.value = defaults.status || 'active';
       const pr = document.getElementById('proj-priority'); if (pr) pr.value = defaults.priority || 'medium';
       const pn = document.getElementById('proj-name'); if (pn && defaults.name) pn.value = defaults.name;
-      if (!this._milestones?.length) this._milestones = (defaults.milestones || []).map(m => ({...m}));
+      // Toujours repartir à zéro : avant, les jalons d'un projet consulté juste avant
+      // « fuyaient » dans le formulaire du nouveau projet.
+      this._milestones = (defaults.milestones || []).map(m => ({ ...m, done: false }));
     }
+    ['ms-title-input', 'ms-date-input'].forEach(i => { const el = document.getElementById(i); if (el) el.value = ''; });
     const err = document.getElementById('proj-name-err'); if (err) err.textContent = '';
     this._renderMilestones();
     Modal.open('modal-project');
@@ -496,19 +498,23 @@ const Projects = {
     const p = this._projects.find(x => x.id === id);
     if (!p) return;
     const { id: _id, createdAt: _ca, ...rest } = p;
-    await userCol(Collections.PROJECTS).add({ ...rest, name: p.name + ' (copie)', archived: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
-    Toast.success('Dupliquer', `"${p.name}" dupliqué`);
-    ActivityLog.add('project_duplicated', `Projet dupliqué : "${p.name}"`);
-    await this._load();
+    try {
+      await userCol(Collections.PROJECTS).add({ ...rest, name: p.name + ' (copie)', archived: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      Toast.success('Dupliquer', `"${p.name}" dupliqué`);
+      ActivityLog.add('project_duplicated', `Projet dupliqué : "${p.name}"`);
+      await this._load();
+    } catch (e) { Toast.error(i18n.t('error_generic'), e.message); }
   },
 
   async _toggleArchive(id) {
     const p = this._projects.find(x => x.id === id);
     if (!p) return;
-    await userCol(Collections.PROJECTS).doc(id).update({ archived: !p.archived, updatedAt: new Date().toISOString() });
-    Toast.success(p.archived ? i18n.t('project_unarchive') : i18n.t('project_archive'), p.name);
-    ActivityLog.add('project_archived', `Projet ${p.archived ? 'restauré' : 'archivé'} : "${p.name}"`);
-    await this._load();
+    try {
+      await userCol(Collections.PROJECTS).doc(id).update({ archived: !p.archived, updatedAt: new Date().toISOString() });
+      Toast.success(p.archived ? i18n.t('project_unarchive') : i18n.t('project_archive'), p.name);
+      ActivityLog.add('project_archived', `Projet ${p.archived ? 'restauré' : 'archivé'} : "${p.name}"`);
+      await this._load();
+    } catch (e) { Toast.error(i18n.t('error_generic'), e.message); }
   },
 
   async _delete(id) {

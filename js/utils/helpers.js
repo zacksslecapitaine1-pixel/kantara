@@ -5,6 +5,21 @@
 // ════════════════════════════════
 // TOAST NOTIFICATIONS
 // ════════════════════════════════
+// ════════════════════════════════
+// ESCAPE HTML (anti-injection) — utilisé par tous les modules
+// BUG CORRIGÉ : cette fonction était appelée partout mais n'était définie nulle part,
+// ce qui faisait planter l'affichage des listes et l'ouverture des formulaires
+// dès qu'il existait au moins un projet / client / membre.
+// ════════════════════════════════
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const Toast = {
   _container: null,
 
@@ -33,8 +48,8 @@ const Toast = {
     toast.innerHTML = `
       <div class="toast-icon">${icons[type] || icons.info}</div>
       <div class="toast-content">
-        <div class="toast-title">${title}</div>
-        ${message ? `<div class="toast-message">${message}</div>` : ''}
+        <div class="toast-title">${escapeHtml(title)}</div>
+        ${message ? `<div class="toast-message">${escapeHtml(message)}</div>` : ''}
       </div>
       <div class="toast-close">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -68,36 +83,41 @@ const Toast = {
 // ════════════════════════════════
 const Modal = {
   _stack: [],
+  _escBound: false,
 
   open(id) {
     const el = document.getElementById(id);
     if (!el) return;
+    clearTimeout(el._closeTimer);            // annule une fermeture en cours (réouverture rapide)
     el.style.display = 'flex';
     requestAnimationFrame(() => el.classList.add('visible'));
-    this._stack.push(id);
+    if (!this._stack.includes(id)) this._stack.push(id);
     document.body.style.overflow = 'hidden';
 
-    // Close on overlay click
-    el.addEventListener('click', (e) => {
-      if (e.target === el) this.close(id);
-    }, { once: true });
+    // Fermeture au clic sur le fond (handler unique : l'ancien « once » était consommé
+    // par n'importe quel premier clic dans la fenêtre, et les écouteurs s'accumulaient)
+    el.onmousedown = (e) => { el._downOnOverlay = (e.target === el); };
+    el.onclick = (e) => { if (e.target === el && el._downOnOverlay) this.close(id); };
 
-    // Close on Escape
-    const onEsc = (e) => {
-      if (e.key === 'Escape') { this.close(id); document.removeEventListener('keydown', onEsc); }
-    };
-    document.addEventListener('keydown', onEsc);
+    // Touche Échap : un seul écouteur global, ferme la fenêtre du dessus
+    if (!this._escBound) {
+      this._escBound = true;
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this._stack.length) this.close(this._stack[this._stack.length - 1]);
+      });
+    }
   },
 
   close(id) {
     const el = document.getElementById(id);
     if (!el) return;
     el.classList.remove('visible');
-    setTimeout(() => {
-      el.style.display = 'none';
-      const idx = this._stack.indexOf(id);
-      if (idx > -1) this._stack.splice(idx, 1);
-      if (this._stack.length === 0) document.body.style.overflow = '';
+    const idx = this._stack.indexOf(id);
+    if (idx > -1) this._stack.splice(idx, 1);
+    if (this._stack.length === 0) document.body.style.overflow = '';
+    clearTimeout(el._closeTimer);
+    el._closeTimer = setTimeout(() => {
+      if (!this._stack.includes(id)) el.style.display = 'none';
     }, 300);
   },
 
@@ -148,7 +168,13 @@ const Modal = {
     okBtn.className = `btn btn-${type}`;
 
     cancelBtn.onclick = () => this.close('confirm-modal');
-    okBtn.onclick = () => { this.close('confirm-modal'); onConfirm(); };
+    okBtn.onclick = () => {
+      this.close('confirm-modal');
+      // Les suppressions échouaient en silence : on affiche maintenant l'erreur
+      Promise.resolve()
+        .then(() => onConfirm())
+        .catch(err => Toast.error(i18n.t('error_generic'), err?.message || ''));
+    };
 
     this.open('confirm-modal');
   }
@@ -275,6 +301,7 @@ const Format = {
   date(d, opts = {}) {
     if (!d) return '—';
     const date = d?.toDate ? d.toDate() : new Date(d);
+    if (isNaN(date.getTime())) return '—';
     const locale = i18n.getLang() === 'fr' ? 'fr-FR' : 'en-US';
     return date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric', ...opts });
   },
@@ -282,12 +309,14 @@ const Format = {
   dateInput(d) {
     if (!d) return '';
     const date = d?.toDate ? d.toDate() : new Date(d);
+    if (isNaN(date.getTime())) return '';
     return date.toISOString().split('T')[0];
   },
 
   timeAgo(d) {
     if (!d) return '';
     const date = d?.toDate ? d.toDate() : new Date(d);
+    if (isNaN(date.getTime())) return '';
     const diff = Date.now() - date.getTime();
     const min = Math.floor(diff / 60000);
     const hr = Math.floor(diff / 3600000);
@@ -307,7 +336,7 @@ const Format = {
   },
 
   initials(name = '') {
-    return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+    return String(name || '').split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
   },
 
   truncate(str = '', maxLen = 40) {
@@ -430,15 +459,10 @@ const Router = {
 // ════════════════════════════════
 const Journal = {
   async log(action, details = {}) {
-    const user = (typeof Auth !== 'undefined') ? Auth.getUser() : null;
-    if (!user) return;
+    // Le journal était écrit dans la table « notifications » avec des colonnes qui n'existent
+    // pas (action, details, uid) : chaque écriture échouait. On utilise le journal local.
     try {
-      await userCol(Collections.JOURNAL).add({
-        action,
-        details,
-        createdAt: now(),
-        uid: user.uid,
-      });
+      ActivityLog.add(action, typeof details === 'string' ? details : (details.message || action));
     } catch (e) {
       // Non-blocking — journal errors must never break the UI
     }

@@ -54,7 +54,7 @@ Application web de gestion de projets, tâches, clients, équipe et documents, a
 
 ## Migration base de données (Supabase)
 
-Exécutez le SQL contenu dans `js/config/supabase.js` (variable `KANTARA_V4_SQL`)
+Exécutez le SQL contenu dans `supabase/kantara-init-and-update.sql` (script idempotent, sans suppression de données ; aussi disponible dans Réglages → Base de données)
 dans votre tableau de bord Supabase → SQL Editor.
 
 ### Nouvelles tables créées

@@ -87,6 +87,7 @@ const FIELD_MAP = {
   // dépenses
   supplierId:           'supplier_id',
   receiptUrl:           'receipt_url',
+  paymentMethod:        'payment_method',
   // factures / devis
   quoteId:              'quote_id',
   invoiceId:            'invoice_id',
@@ -176,6 +177,62 @@ function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
+// ─── Écriture résiliente ──────────────────────────────────
+// Si la base n'a pas encore toutes les colonnes attendues (SQL de mise à jour pas encore
+// exécuté), PostgREST renvoie « Could not find the 'x' column ». Avant, la création
+// échouait complètement. Maintenant on retire la colonne inconnue et on réessaie : la
+// création fonctionne, et on prévient l'utilisateur de lancer le SQL de mise à jour.
+const _missingColumns = new Set();
+let _missingWarned = false;
+
+function _extractMissingColumn(error) {
+  const msg = (error && error.message) || '';
+  let m = msg.match(/Could not find the '([^']+)' column/i);      // PostgREST (PGRST204)
+  if (!m) m = msg.match(/column "([^"]+)" of relation/i);          // Postgres (42703)
+  return m ? m[1] : null;
+}
+
+function _friendlyDbError(error) {
+  const msg = (error && error.message) || 'Erreur base de données';
+  if (error?.code === '42P01' || /relation .* does not exist/i.test(msg))
+    return 'Table introuvable : exécutez le SQL d\'initialisation dans Supabase (SQL Editor).';
+  if (error?.code === '42501' || /permission denied|row-level security/i.test(msg))
+    return 'Accès refusé par Supabase : exécutez le SQL d\'initialisation (il désactive la RLS des tables).';
+  if (error?.code === '23505')
+    return 'Cet élément existe déjà (valeur en double).';
+  if (error?.code === '23502')
+    return 'Un champ obligatoire est vide : ' + msg;
+  return msg;
+}
+
+async function _writeResilient(table, row, run) {
+  const payload = { ...row };
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const { error } = await run(payload);
+    if (!error) {
+      if (_missingColumns.size && !_missingWarned && typeof Toast !== 'undefined') {
+        _missingWarned = true;
+        Toast.warning(
+          'Base de données à mettre à jour',
+          'Enregistré, mais certaines colonnes manquent (' + [..._missingColumns].join(', ') +
+          '). Copiez le SQL de mise à jour (Paramètres → Base de données) et exécutez-le dans Supabase.',
+          12000
+        );
+      }
+      return;
+    }
+    const col = _extractMissingColumn(error);
+    if (col && col in payload && col !== 'id') {
+      delete payload[col];
+      _missingColumns.add(table + '.' + col);
+      console.warn('[Kantara] Colonne absente ' + table + '.' + col + ' — ignorée. Exécutez le SQL de mise à jour.');
+      continue;
+    }
+    throw new Error(_friendlyDbError(error));
+  }
+  throw new Error('Enregistrement impossible : trop de colonnes manquantes. Exécutez le SQL de mise à jour dans Supabase.');
+}
+
 // ─── DocRef ───────────────────────────────────────────────
 class DocRef {
   constructor(table, id) { this._table = table; this._id = id; }
@@ -188,9 +245,8 @@ class DocRef {
   }
 
   async update(updates) {
-    const { error } = await getClient()
-      .from(this._table).update(serializeData(updates)).eq('id', this._id);
-    if (error) throw new Error(error.message);
+    await _writeResilient(this._table, serializeData(updates),
+      (p) => getClient().from(this._table).update(p).eq('id', this._id));
   }
 
   async delete() {
@@ -200,8 +256,8 @@ class DocRef {
 
   async set(data) {
     const row = { ...serializeData(data), id: this._id };
-    const { error } = await getClient().from(this._table).upsert(row);
-    if (error) throw new Error(error.message);
+    await _writeResilient(this._table, row,
+      (p) => getClient().from(this._table).upsert(p));
   }
 
   collection(subCol) {
@@ -277,8 +333,8 @@ class CollectionRef {
   async add(data) {
     const id  = crypto.randomUUID ? crypto.randomUUID() : generateId();
     const row = { ...serializeData(data), id };
-    const { error } = await getClient().from(this._table).insert(row);
-    if (error) throw new Error(error.message);
+    await _writeResilient(this._table, row,
+      (p) => getClient().from(this._table).insert(p));
     return { id };
   }
 
@@ -418,34 +474,21 @@ const KantaraDB = {
   },
 };
 
-// ─── SQL d'initialisation COMPLET v4 ──────────────────────
-// Affiché à l'étape 2 du wizard de configuration
-// Contient TOUTES les tables (v3 + v4 nouvelles)
+// ─── SQL d'initialisation / mise à jour v4.1 ─────────────
+// Non destructif (CREATE IF NOT EXISTS + ADD COLUMN IF NOT EXISTS) : réexécutable sans perdre de données.
+// Affiché à l'étape 1 du wizard et copiable depuis Paramètres → Base de données.
 const KANTARA_INIT_SQL = `-- ═══════════════════════════════════════════════════════════
--- KANTARA v4 — SQL D'INITIALISATION COMPLET
+-- KANTARA v4.1 — SQL D'INITIALISATION ET DE MISE À JOUR
 -- Copiez TOUT ce bloc dans Supabase > SQL Editor > Run
+--
+-- ✅ SANS DANGER : aucune donnée n'est supprimée.
+--    Utilisable sur une base neuve OU sur une base existante
+--    (il ajoute simplement les tables / colonnes manquantes).
+--    Vous pouvez l'exécuter autant de fois que nécessaire.
 -- ═══════════════════════════════════════════════════════════
 
--- ── Suppression des tables existantes ─────────────────────
-DROP TABLE IF EXISTS documents        CASCADE;
-DROP TABLE IF EXISTS subtasks         CASCADE;
-DROP TABLE IF EXISTS milestones       CASCADE;
-DROP TABLE IF EXISTS team_members     CASCADE;
-DROP TABLE IF EXISTS notifications    CASCADE;
-DROP TABLE IF EXISTS proofs           CASCADE;
-DROP TABLE IF EXISTS payments         CASCADE;
-DROP TABLE IF EXISTS invoices         CASCADE;
-DROP TABLE IF EXISTS quotes           CASCADE;
-DROP TABLE IF EXISTS expenses         CASCADE;
-DROP TABLE IF EXISTS tasks            CASCADE;
-DROP TABLE IF EXISTS suppliers        CASCADE;
-DROP TABLE IF EXISTS clients          CASCADE;
-DROP TABLE IF EXISTS projects         CASCADE;
-DROP TABLE IF EXISTS followers        CASCADE;
-DROP TABLE IF EXISTS settings         CASCADE;
-
 -- ── TABLE : settings ──────────────────────────────────────
-CREATE TABLE settings (
+CREATE TABLE IF NOT EXISTS settings (
   id                    TEXT        PRIMARY KEY DEFAULT 'config',
   admin_password        TEXT        NOT NULL DEFAULT '1234',
   display_name          TEXT        NOT NULL DEFAULT 'Administrateur',
@@ -457,10 +500,9 @@ CREATE TABLE settings (
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
 
--- ── TABLE : followers ─────────────────────────────────────
-CREATE TABLE followers (
+-- ── TABLE : followers (observateurs) ──────────────────────
+CREATE TABLE IF NOT EXISTS followers (
   id          TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   name        TEXT        NOT NULL,
   access_code TEXT        UNIQUE NOT NULL,
@@ -468,10 +510,9 @@ CREATE TABLE followers (
   is_active   BOOLEAN     NOT NULL DEFAULT true,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE followers DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : projects ──────────────────────────────────────
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
   id          TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   name        TEXT        NOT NULL,
   description TEXT        NOT NULL DEFAULT '',
@@ -488,10 +529,9 @@ CREATE TABLE projects (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE projects DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : tasks ─────────────────────────────────────────
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
   id               TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   title            TEXT        NOT NULL,
   project_id       TEXT,
@@ -510,54 +550,59 @@ CREATE TABLE tasks (
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE tasks DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : clients ───────────────────────────────────────
-CREATE TABLE clients (
+CREATE TABLE IF NOT EXISTS clients (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   name       TEXT        NOT NULL,
   email      TEXT        NOT NULL DEFAULT '',
   phone      TEXT        NOT NULL DEFAULT '',
   address    TEXT        NOT NULL DEFAULT '',
   company    TEXT        NOT NULL DEFAULT '',
+  type       TEXT        NOT NULL DEFAULT 'individual',
+  status     TEXT        NOT NULL DEFAULT 'active',
+  city       TEXT        NOT NULL DEFAULT '',
+  country    TEXT        NOT NULL DEFAULT '',
   notes      TEXT        NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE clients DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : suppliers ─────────────────────────────────────
-CREATE TABLE suppliers (
+CREATE TABLE IF NOT EXISTS suppliers (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   name       TEXT        NOT NULL,
   email      TEXT        NOT NULL DEFAULT '',
   phone      TEXT        NOT NULL DEFAULT '',
   address    TEXT        NOT NULL DEFAULT '',
   category   TEXT        NOT NULL DEFAULT '',
+  specialty  TEXT        NOT NULL DEFAULT '',
   notes      TEXT        NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE suppliers DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : expenses ──────────────────────────────────────
-CREATE TABLE expenses (
-  id          TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
-  title       TEXT        NOT NULL,
-  amount      NUMERIC     NOT NULL DEFAULT 0,
-  category    TEXT        NOT NULL DEFAULT '',
-  project_id  TEXT,
-  supplier_id TEXT,
-  date        TEXT,
-  notes       TEXT        NOT NULL DEFAULT '',
-  receipt_url TEXT        NOT NULL DEFAULT '',
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS expenses (
+  id             TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
+  title          TEXT        NOT NULL DEFAULT '',
+  description    TEXT        NOT NULL DEFAULT '',
+  amount         NUMERIC     NOT NULL DEFAULT 0,
+  category       TEXT        NOT NULL DEFAULT '',
+  project_id     TEXT,
+  supplier_id    TEXT,
+  date           TEXT,
+  payment_method TEXT        NOT NULL DEFAULT 'cash',
+  reference      TEXT        NOT NULL DEFAULT '',
+  currency       TEXT        NOT NULL DEFAULT 'XOF',
+  notes          TEXT        NOT NULL DEFAULT '',
+  receipt_url    TEXT        NOT NULL DEFAULT '',
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE expenses DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : quotes ────────────────────────────────────────
-CREATE TABLE quotes (
+CREATE TABLE IF NOT EXISTS quotes (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   number     TEXT,
   client_id  TEXT,
@@ -574,10 +619,9 @@ CREATE TABLE quotes (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE quotes DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : invoices ──────────────────────────────────────
-CREATE TABLE invoices (
+CREATE TABLE IF NOT EXISTS invoices (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   number     TEXT,
   client_id  TEXT,
@@ -596,10 +640,9 @@ CREATE TABLE invoices (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE invoices DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : payments ──────────────────────────────────────
-CREATE TABLE payments (
+CREATE TABLE IF NOT EXISTS payments (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   invoice_id TEXT,
   amount     NUMERIC     NOT NULL DEFAULT 0,
@@ -608,10 +651,9 @@ CREATE TABLE payments (
   notes      TEXT        NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : proofs ────────────────────────────────────────
-CREATE TABLE proofs (
+CREATE TABLE IF NOT EXISTS proofs (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   url        TEXT        NOT NULL DEFAULT '',
   file_name  TEXT        NOT NULL DEFAULT '',
@@ -621,10 +663,9 @@ CREATE TABLE proofs (
   link_id    TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE proofs DISABLE ROW LEVEL SECURITY;
 
 -- ── TABLE : notifications ─────────────────────────────────
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   title      TEXT,
   message    TEXT,
@@ -632,14 +673,9 @@ CREATE TABLE notifications (
   read       BOOLEAN     NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
 
--- ═══════════════════════════════════════════════
--- NOUVELLES TABLES v4
--- ═══════════════════════════════════════════════
-
--- ── TABLE : team_members ──────────────────────
-CREATE TABLE team_members (
+-- ── TABLE : team_members ──────────────────────────────────
+CREATE TABLE IF NOT EXISTS team_members (
   id                TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   name              TEXT        NOT NULL,
   email             TEXT        NOT NULL DEFAULT '',
@@ -653,10 +689,9 @@ CREATE TABLE team_members (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE team_members DISABLE ROW LEVEL SECURITY;
 
--- ── TABLE : milestones ────────────────────────
-CREATE TABLE milestones (
+-- ── TABLE : milestones ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS milestones (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   project_id TEXT        NOT NULL,
   title      TEXT        NOT NULL,
@@ -665,20 +700,18 @@ CREATE TABLE milestones (
   notes      TEXT        NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE milestones DISABLE ROW LEVEL SECURITY;
 
--- ── TABLE : subtasks ──────────────────────────
-CREATE TABLE subtasks (
+-- ── TABLE : subtasks ──────────────────────────────────────
+CREATE TABLE IF NOT EXISTS subtasks (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   task_id    TEXT        NOT NULL,
   title      TEXT        NOT NULL,
   done       BOOLEAN     NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE subtasks DISABLE ROW LEVEL SECURITY;
 
--- ── TABLE : documents ─────────────────────────
-CREATE TABLE documents (
+-- ── TABLE : documents ─────────────────────────────────────
+CREATE TABLE IF NOT EXISTS documents (
   id         TEXT        PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   title      TEXT        NOT NULL,
   type       TEXT        NOT NULL DEFAULT 'other',
@@ -689,14 +722,69 @@ CREATE TABLE documents (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
 
--- ── Données initiales ──────────────────────────
+-- ═══════════════════════════════════════════════════════════
+-- MISE À JOUR DES TABLES EXISTANTES
+-- (ajoute les colonnes manquantes — sans effet si déjà présentes)
+-- ═══════════════════════════════════════════════════════════
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS company_name          TEXT    NOT NULL DEFAULT 'Mon Entreprise';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS currency              TEXT    NOT NULL DEFAULT 'XOF';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS language              TEXT    NOT NULL DEFAULT 'fr';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS theme                 TEXT    NOT NULL DEFAULT 'light';
+ALTER TABLE settings ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN NOT NULL DEFAULT true;
+
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS archived   BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS milestones TEXT    NOT NULL DEFAULT '[]';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS color      TEXT    NOT NULL DEFAULT '#C9972A';
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignee_id      TEXT    NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS issue            TEXT    NOT NULL DEFAULT '';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS tags             TEXT    NOT NULL DEFAULT '[]';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS checklist        TEXT    NOT NULL DEFAULT '[]';
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS time_estimate    NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS is_recurring     BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS recurring_period TEXT    NOT NULL DEFAULT 'weekly';
+
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS type    TEXT NOT NULL DEFAULT 'individual';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS status  TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS city    TEXT NOT NULL DEFAULT '';
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS country TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS specialty TEXT NOT NULL DEFAULT '';
+
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS description    TEXT NOT NULL DEFAULT '';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS payment_method TEXT NOT NULL DEFAULT 'cash';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS reference      TEXT NOT NULL DEFAULT '';
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS currency       TEXT NOT NULL DEFAULT 'XOF';
+ALTER TABLE expenses ALTER COLUMN title SET DEFAULT '';
+
+-- ── Accès (l'application utilise la clé publique "anon") ──
+ALTER TABLE settings      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE followers     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE projects      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks         DISABLE ROW LEVEL SECURITY;
+ALTER TABLE clients       DISABLE ROW LEVEL SECURITY;
+ALTER TABLE suppliers     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE quotes        DISABLE ROW LEVEL SECURITY;
+ALTER TABLE invoices      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE payments      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE proofs        DISABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications DISABLE ROW LEVEL SECURITY;
+ALTER TABLE team_members  DISABLE ROW LEVEL SECURITY;
+ALTER TABLE milestones    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE subtasks      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE documents     DISABLE ROW LEVEL SECURITY;
+
+-- ── Données initiales ─────────────────────────────────────
 INSERT INTO settings (id, admin_password, display_name, company_name, currency, language, theme)
 VALUES ('config', '1234', 'Administrateur', 'Mon Entreprise', 'XOF', 'fr', 'light')
 ON CONFLICT (id) DO NOTHING;
 
--- ═══════════════════════════════════════════════
--- ✅ FIN — Kantara v4 prêt !
--- ═══════════════════════════════════════════════`;
+-- ── Recharge le cache de l'API Supabase (prise en compte immédiate) ──
+NOTIFY pgrst, 'reload schema';
+
+-- ═══════════════════════════════════════════════════════════
+-- ✅ FIN — Kantara v4.1 prêt !
+-- ═══════════════════════════════════════════════════════════`;
 

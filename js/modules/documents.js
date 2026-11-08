@@ -190,7 +190,7 @@ const Documents = {
         <div class="doc-name" title="${escapeHtml(d.title)}">${escapeHtml(d.title)}</div>
         <div class="doc-meta">
           ${proj ? `📁 ${escapeHtml(proj.name)} · ` : ''}
-          ${Format.date(new Date(d.createdAt))}
+          ${Format.date(d.createdAt)}
         </div>
         ${d.notes ? `<div style="font-size:.72rem;color:var(--text-muted);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(d.notes)}</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:8px">
@@ -231,10 +231,13 @@ const Documents = {
     const errEl   = document.getElementById('doc-title-err');
     if (!title) { if (errEl) errEl.textContent = i18n.t('required'); titleEl?.focus(); return; }
     if (errEl) errEl.textContent = '';
+    // Un lien collé sans « https:// » (ex. drive.google.com/...) devenait un chemin relatif cassé
+    let url = document.getElementById('doc-url-input')?.value.trim() || '';
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
     const data = {
       title,
       type:      document.getElementById('doc-type-sel')?.value || 'other',
-      url:       document.getElementById('doc-url-input')?.value.trim() || '',
+      url,
       projectId: document.getElementById('doc-project-sel')?.value || '',
       notes:     document.getElementById('doc-notes')?.value.trim() || '',
       updatedAt: new Date().toISOString(),

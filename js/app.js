@@ -33,6 +33,7 @@ const App = {
     '/documents':     { panel: 'panel-documents',     title: 'nav_documents',     module: 'Documents'   },
   },
   _initialized: new Set(),
+  _pending: {},            // promesse de chargement de chaque page (pour la création rapide)
   _currentPath: '/dashboard',
 
   async boot() {
@@ -63,6 +64,7 @@ const App = {
       const lang = AppState.userProfile?.language || i18n.getLang();
       if (lang !== i18n.getLang()) i18n.setLang(lang);
 
+      try {
       this._registerModules();
       this._setupUser(user);
       this._setupSidebar(user);
@@ -76,6 +78,11 @@ const App = {
       this._setupFAB();
       this._initRouter();
       Notifications.loadCount();
+      } catch (err) {
+        // Avant : une erreur ici laissait l'écran de chargement bloqué indéfiniment
+        console.error('[Kantara] Erreur au démarrage :', err);
+        Toast.error('Erreur au démarrage', err.message);
+      }
 
       setTimeout(() => {
         const loader = document.getElementById('app-loader');
@@ -146,14 +153,8 @@ const App = {
   },
 
   _setupTopbar() {
-    const mobileBtn = document.getElementById('mobile-menu-btn');
-    mobileBtn?.addEventListener('click', () => {
-      if (SidebarManager._sidebar?.classList.contains('mobile-open')) {
-        SidebarManager.close();
-      } else {
-        SidebarManager.open();
-      }
-    });
+    // Le menu mobile est déjà géré par SidebarManager.init(). Le brancher ici aussi
+    // le faisait s'ouvrir puis se refermer aussitôt (double basculement) : il ne s'ouvrait jamais.
   },
 
   _setupThemeToggle() {
@@ -238,8 +239,8 @@ const App = {
   },
 
   _setupSidebarToggle() {
-    const toggleBtn = document.getElementById('sidebar-toggle');
-    toggleBtn?.addEventListener('click', () => SidebarManager.toggle());
+    // Déjà branché dans SidebarManager.init() — un second écouteur annulait le premier
+    // (le bouton réduire/agrandir la barre latérale ne faisait rien).
   },
 
   _setupGlobalSearch() {
@@ -294,36 +295,45 @@ const App = {
     });
   },
 
-  _initRouter() {
-    const nav = (path) => {
-      history.pushState({}, '', path);
-      this._loadPage(path);
-    };
+  // Routage par hash (#/projects) : l'ancienne version faisait pushState('/projects'), ce qui
+  // changeait l'URL en https://site.github.io/projects → 404 au rechargement sur GitHub Pages.
+  _pathFromHash() {
+    const p = (location.hash || '').replace(/^#/, '');
+    return this._pages[p] ? p : '/dashboard';
+  },
 
-    // Sidebar nav links
+  _initRouter() {
+    // Liens de navigation (menu latéral, boutons « Voir tout »…)
     document.querySelectorAll('[data-page]').forEach(el => {
       el.addEventListener('click', (e) => {
         e.preventDefault();
-        const path = el.dataset.page;
-        nav(path);
+        this.goTo(el.dataset.page);
         if (window.innerWidth <= 768) SidebarManager.close();
       });
     });
 
-    // Popstate
-    window.addEventListener('popstate', () => {
-      this._loadPage(location.pathname || '/dashboard');
-    });
+    // Boutons précédent / suivant du navigateur
+    window.addEventListener('popstate', () => this._loadPage(this._pathFromHash()));
 
-    // Initial load
-    const initial = location.pathname;
-    const validPaths = Object.keys(this._pages);
-    this._loadPage(validPaths.includes(initial) ? initial : '/dashboard');
+    // Chargement initial
+    this._loadPage(this._pathFromHash());
   },
 
   goTo(path) {
-    history.pushState({}, '', path);
+    if (!this._pages[path]) path = '/dashboard';
+    const current = (location.hash || '').replace(/^#/, '');
+    if (current !== path) history.pushState({}, '', '#' + path);
     this._loadPage(path);
+  },
+
+  // Création rapide (bouton +) : ouvre la page, ATTEND le chargement des listes
+  // (projets, clients, équipe…), puis ouvre le formulaire. Avant, le formulaire s'ouvrait
+  // après 300 ms fixes, souvent avant la fin du chargement → listes déroulantes vides.
+  async quickCreate(path, moduleName) {
+    this.goTo(path);
+    try { await this._pending[path]; } catch (e) { /* géré par la page */ }
+    const mod = this._modules[moduleName];
+    if (mod && typeof mod._openModal === 'function') mod._openModal();
   },
 
   _loadPage(path) {
@@ -351,7 +361,7 @@ const App = {
       const mod = this._modules[page.module];
       if (mod && typeof mod.init === 'function') {
         this._initialized.add(resolvedPath);
-        mod.init(panel).catch(err => {
+        this._pending[resolvedPath] = mod.init(panel).catch(err => {
           console.error(`[Kantara] Module ${page.module} error:`, err);
           // Show error visibly inside the panel
           if (panel) {
@@ -362,7 +372,7 @@ const App = {
                 </div>
                 <div>
                   <div style="font-weight:700;color:#dc2626;font-size:.95rem;margin-bottom:6px">Erreur de chargement</div>
-                  <div style="color:#64748b;font-size:.82rem;max-width:400px">${err.message || 'Une erreur inattendue est survenue'}</div>
+                  <div style="color:#64748b;font-size:.82rem;max-width:400px">${escapeHtml(err.message || 'Une erreur inattendue est survenue')}</div>
                 </div>
                 <button onclick="App._initialized.delete('${resolvedPath}');App._loadPage('${resolvedPath}')" style="padding:8px 20px;background:var(--navy);color:white;border:none;border-radius:8px;cursor:pointer;font-size:.85rem">Réessayer</button>
               </div>`;
@@ -371,7 +381,9 @@ const App = {
       }
     } else {
       const mod = this._modules[page.module];
-      if (mod && typeof mod.refresh === 'function') mod.refresh();
+      if (mod && typeof mod.refresh === 'function') {
+        this._pending[resolvedPath] = Promise.resolve(mod.refresh()).catch(() => {});
+      }
     }
   },
   _setupFAB() {

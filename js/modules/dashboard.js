@@ -165,7 +165,7 @@ const Dashboard = {
 
     // Wire "voir tout" nav buttons
     this._panel.querySelectorAll('[data-page]').forEach(btn => {
-      btn.addEventListener('click', () => App._loadPage(btn.dataset.page));
+      btn.addEventListener('click', () => App.goTo(btn.dataset.page));
     });
   },
 
@@ -277,7 +277,7 @@ const Dashboard = {
     projects.forEach(p => {
       const spent = expenses.filter(e => e.projectId === p.id).reduce((s,e) => s+(+e.amount||0), 0);
       if (p.budget && spent > +p.budget)
-        alerts.push({ type:'danger', msg: `⚠️ ${L==='fr'?'Budget dépassé':'Over budget'}: <strong>${p.name}</strong>` });
+        alerts.push({ type:'danger', msg: `⚠️ ${L==='fr'?'Budget dépassé':'Over budget'}: <strong>${escapeHtml(p.name)}</strong>` });
     });
 
     // Overdue invoices
@@ -384,7 +384,7 @@ const Dashboard = {
       const pct   = p.budget ? Math.min(100, Math.round(spent/+p.budget*100)) : 0;
       const tCount = tasks.filter(t=>t.projectId===p.id).length;
       return `
-        <div class="dash-row" onclick="App._loadPage('/projects')" style="padding:14px 20px;border-bottom:1px solid var(--divider);cursor:pointer;transition:background .15s">
+        <div class="dash-row" onclick="App.goTo('/projects')" style="padding:14px 20px;border-bottom:1px solid var(--divider);cursor:pointer;transition:background .15s">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
             <span style="font-weight:600;font-size:.87rem;color:var(--navy)">${Format.truncate(p.name||'—',30)}</span>
             <span class="badge ${statusClasses[p.status]||'badge-low'}">${statusLabels[p.status]||p.status}</span>

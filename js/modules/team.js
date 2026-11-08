@@ -162,7 +162,7 @@ const Team = {
     if (sel) {
       const cur = sel.value;
       sel.innerHTML = `<option value="all">${i18n.t('team_all_depts')}</option>` +
-        depts.map(d => `<option value="${d}" ${d===cur?'selected':''}>${escapeHtml(d)}</option>`).join('');
+        depts.map(d => `<option value="${escapeHtml(d)}" ${d===cur?'selected':''}>${escapeHtml(d)}</option>`).join('');
     }
   },
 

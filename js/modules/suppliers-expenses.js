@@ -65,7 +65,7 @@ const Suppliers = {
 
   _renderList(){
     const el=document.getElementById('sup-content'); if(!el)return;
-    const list=this._suppliers.filter(s=>!this._searchQuery||s.name.toLowerCase().includes(this._searchQuery));
+    const list=this._suppliers.filter(s=>!this._searchQuery||(s.name||'').toLowerCase().includes(this._searchQuery));
     if(!list.length){
       el.innerHTML=`<div class="empty-state"><div class="empty-icon"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div><h3 class="empty-title">${i18n.t('supplier_no_suppliers')}</h3><button class="btn btn-primary" onclick="document.getElementById('sup-new-btn').click()">+ ${i18n.t('supplier_new')}</button></div>`;
       return;
@@ -78,10 +78,10 @@ const Suppliers = {
         return`<div class="card card-hoverable" style="padding:20px">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
             <div class="user-avatar" style="width:42px;height:42px;font-size:.9rem;background:linear-gradient(135deg,var(--navy-mid),var(--navy-soft))">${Format.initials(s.name)}</div>
-            <div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.name}</div>${s.specialty?`<div style="font-size:.72rem;color:var(--gold-muted)">${s.specialty}</div>`:''}</div>
+            <div style="flex:1;min-width:0"><div style="font-weight:600;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(s.name)}</div>${(s.specialty||s.category)?`<div style="font-size:.72rem;color:var(--gold-muted)">${escapeHtml(s.specialty||s.category)}</div>`:''}</div>
           </div>
-          ${s.phone?`<div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px">📞 ${s.phone}</div>`:''}
-          ${s.email?`<div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px">✉️ ${s.email}</div>`:''}
+          ${s.phone?`<div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px">📞 ${escapeHtml(s.phone)}</div>`:''}
+          ${s.email?`<div style="font-size:.8rem;color:var(--text-muted);margin-bottom:6px">✉️ ${escapeHtml(s.email)}</div>`:''}
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:12px;border-top:1px solid var(--divider)">
             <div><div style="font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">${i18n.t('supplier_total_spent')}</div><div style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;color:var(--navy)">${Format.currency(spent,currency)}</div></div>
             <div style="display:flex;gap:4px">
@@ -102,7 +102,7 @@ const Suppliers = {
     if(id){
       const s=this._suppliers.find(x=>x.id===id);if(!s)return;
       document.getElementById('sup-name').value=s.name||'';
-      document.getElementById('sup-specialty').value=s.specialty||'';
+      document.getElementById('sup-specialty').value=s.specialty||s.category||'';
       document.getElementById('sup-phone').value=s.phone||'';
       document.getElementById('sup-email').value=s.email||'';
       document.getElementById('sup-address').value=s.address||'';
@@ -240,8 +240,8 @@ const Expenses = {
       this._suppliers=supSnap.docs.map(d=>({id:d.id,...d.data()}));
       AppState.expenses=this._expenses;
 
-      const projOpts=this._projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-      const supOpts=this._suppliers.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+      const projOpts=this._projects.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join('');
+      const supOpts=this._suppliers.map(s=>`<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
       const filterSel=document.getElementById('exp-filter-project');
       if(filterSel)filterSel.innerHTML=`<option value="all">${i18n.t('all')} ${i18n.t('nav_projects')}</option>`+projOpts;
       const projSel=document.getElementById('exp-project');
@@ -258,7 +258,7 @@ const Expenses = {
     const el=document.getElementById('exp-stats');if(!el)return;
     const currency=Prefs.getCurrency();
     const total=this._expenses.reduce((s,e)=>s+(e.amount||0),0);
-    const thisMonth=this._expenses.filter(e=>{const d=e.date?.toDate?safeDate(e.date):new Date(e.date);const n=new Date();return d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,e)=>s+(e.amount||0),0);
+    const thisMonth=this._expenses.filter(e=>{const d=safeDate(e.date);const n=new Date();return !!d&&d.getMonth()===n.getMonth()&&d.getFullYear()===n.getFullYear();}).reduce((s,e)=>s+(e.amount||0),0);
     const catMap={};this._expenses.forEach(e=>{catMap[e.category]=(catMap[e.category]||0)+(e.amount||0);});
     const topCat=Object.entries(catMap).sort((a,b)=>b[1]-a[1])[0];
     const catLabels={materials:i18n.t('expense_cat_materials'),transport:i18n.t('expense_cat_transport'),labor:i18n.t('expense_cat_labor'),equipment:i18n.t('expense_cat_equipment'),misc:i18n.t('expense_cat_misc')};
@@ -275,7 +275,7 @@ const Expenses = {
       if(this._filterCat!=='all'&&e.category!==this._filterCat)return false;
       if(this._filterProject!=='all'&&e.projectId!==this._filterProject)return false;
       if(this._filterMethod!=='all'&&e.paymentMethod!==this._filterMethod)return false;
-      if(this._searchQuery&&!(e.description||'').toLowerCase().includes(this._searchQuery))return false;
+      if(this._searchQuery&&!(e.description||e.title||'').toLowerCase().includes(this._searchQuery))return false;
       return true;
     });
     if(!list.length){
@@ -292,9 +292,9 @@ const Expenses = {
         const proj=this._projects.find(p=>p.id===e.projectId);
         const sup=this._suppliers.find(s=>s.id===e.supplierId);
         return`<tr>
-          <td><div style="font-weight:500;color:var(--navy)">${Format.truncate(e.description||'—',35)}</div>${e.reference?`<div style="font-size:.7rem;color:var(--text-muted)">📄 ${e.reference}</div>`:''}${sup?`<div style="font-size:.7rem;color:var(--text-muted)">🏪 ${sup.name}</div>`:''}</td>
+          <td><div style="font-weight:500;color:var(--navy)">${escapeHtml(Format.truncate(e.description||e.title||'—',35))}</div>${e.reference?`<div style="font-size:.7rem;color:var(--text-muted)">📄 ${escapeHtml(e.reference)}</div>`:''}${sup?`<div style="font-size:.7rem;color:var(--text-muted)">🏪 ${escapeHtml(sup.name)}</div>`:''}</td>
           <td><span class="badge" style="background:${catColors[e.category]||'#ccc'}18;color:${catColors[e.category]||'var(--text-muted)'}">${catLabels[e.category]||e.category||'—'}</span></td>
-          <td style="color:var(--text-muted);font-size:.82rem">${proj?proj.name:'—'}</td>
+          <td style="color:var(--text-muted);font-size:.82rem">${proj?escapeHtml(proj.name):'—'}</td>
           <td style="color:var(--text-muted);font-size:.82rem">${methodLabel[e.paymentMethod]||e.paymentMethod||'—'}</td>
           <td style="color:var(--text-muted)">${Format.date(e.date)}</td>
           <td><strong style="color:var(--navy)">${Format.currency(e.amount,e.currency||currency)}</strong></td>
@@ -313,7 +313,7 @@ const Expenses = {
       const e=this._expenses.find(x=>x.id===id);if(!e)return;
       document.getElementById('exp-amount').value=e.amount||'';
       document.getElementById('exp-date').value=Format.dateInput(e.date);
-      document.getElementById('exp-desc').value=e.description||'';
+      document.getElementById('exp-desc').value=e.description||e.title||'';
       document.getElementById('exp-cat').value=e.category||'materials';
       document.getElementById('exp-method').value=e.paymentMethod||'cash';
       document.getElementById('exp-project').value=e.projectId||'';
@@ -346,7 +346,9 @@ const Expenses = {
     if(!valid)return;
     const editId=document.getElementById('exp-save-btn').dataset.editId;
     const data={
-      amount,description:desc,
+      // BUG CORRIGÉ : la table « expenses » exige une colonne « title » (NOT NULL) que le
+      // formulaire n'envoyait jamais → chaque dépense était refusée par la base.
+      amount,title:desc,description:desc,
       date:dateVal?Timestamp.fromDate(new Date(dateVal)):now(),
       category:document.getElementById('exp-cat').value,
       paymentMethod:document.getElementById('exp-method').value,
